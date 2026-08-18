@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, KeyRound, Tv, Plus, RefreshCw, Pencil, Trash2, Check, X, FileText, AlertTriangle, Building2 } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Tv, Plus, RefreshCw, Pencil, Trash2, Check, X, FileText, AlertTriangle } from 'lucide-react';
+import { TableMaster } from '@/types/domino';
 
 const PLAN_MAX_TABLES: Record<string, number> = {
   basic: 5,
@@ -17,10 +18,7 @@ export default function AdminDashboardPage() {
   const {
     tenantCode,
     masterTables,
-    updateTablePin,
-    updateTableName,
-    addMasterTable,
-    deleteMasterTable,
+    setMasterTables,
     getTableMatch,
     setAuth,
   } = useScorerStore();
@@ -32,50 +30,112 @@ export default function AdminDashboardPage() {
   // Quota & Plan Enforcement States
   const [tenantInfo, setTenantInfo] = useState<{ subscriptionPlan: string; maxTables: number } | null>(null);
   const [isQuotaExceededModalOpen, setIsQuotaExceededModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch Tables from Supabase PostgreSQL API
+  const fetchTables = async () => {
+    setIsLoading(true);
+    try {
+      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+      const res = await fetch(`/api/tables?tenantCode=${codeToUse}`);
+      const json = await res.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        const formattedTables: TableMaster[] = json.data.map((t: any) => ({
+          id: t.id,
+          tenantId: t.tenantId,
+          tableNumber: t.tableNumber,
+          tableName: t.tableName,
+          pinCode: t.pinCode,
+          status: t.status as any,
+        }));
+        setMasterTables(formattedTables);
+      }
+    } catch (err) {
+      console.error('Failed to fetch tables:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Fetch Tenant Info from DB API to know current quota limit
-  useEffect(() => {
-    const fetchCurrentTenant = async () => {
-      try {
-        const res = await fetch('/api/tenants');
-        const json = await res.json();
-        if (json.status === 'success' && Array.isArray(json.data)) {
-          const matched = json.data.find((t: any) => t.code.toUpperCase() === (tenantCode || 'TAB-SLOWBAR').toUpperCase());
-          if (matched) {
-            setTenantInfo({
-              subscriptionPlan: matched.subscriptionPlan,
-              maxTables: PLAN_MAX_TABLES[matched.subscriptionPlan] || matched.maxTables || 10,
-            });
-          }
+  const fetchTenantInfo = async () => {
+    try {
+      const res = await fetch('/api/tenants');
+      const json = await res.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        const matched = json.data.find((t: any) => t.code.toUpperCase() === (tenantCode || 'TAB-SLOWBAR').toUpperCase());
+        if (matched) {
+          setTenantInfo({
+            subscriptionPlan: matched.subscriptionPlan,
+            maxTables: PLAN_MAX_TABLES[matched.subscriptionPlan] || matched.maxTables || 10,
+          });
         }
-      } catch (err) {
-        console.error('Failed to fetch tenant info:', err);
       }
-    };
-    fetchCurrentTenant();
+    } catch (err) {
+      console.error('Failed to fetch tenant info:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTables();
+    fetchTenantInfo();
   }, [tenantCode]);
 
   const maxTablesLimit = tenantInfo?.maxTables || PLAN_MAX_TABLES[tenantInfo?.subscriptionPlan || 'pro'] || 10;
   const currentTableCount = masterTables.length;
 
-  const handleGenerateNewPin = (tableId: string) => {
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-    updateTablePin(tableId, newPin);
-  };
-
-  const handleAddNewTable = () => {
+  const handleAddNewTable = async () => {
     // Check Table Quota Limit
     if (currentTableCount >= maxTablesLimit) {
       setIsQuotaExceededModalOpen(true);
       return;
     }
 
-    addMasterTable();
+    const nextTableNum = masterTables.reduce((max, t) => Math.max(max, t.tableNumber), 0) + 1;
+    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+    const newName = `Meja ${nextTableNum <= 2 ? 'Reguler' : 'VIP'} ${nextTableNum < 10 ? '0' + nextTableNum : nextTableNum}`;
+
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantCode: tenantCode || 'TAB-SLOWBAR',
+          tableNumber: nextTableNum,
+          tableName: newName,
+          pinCode: newPin,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTables();
+      } else {
+        alert(`Gagal menambah meja: ${json.message}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi kesalahan: ${err.message}`);
+    }
   };
 
-  const handleEnterWasitTable = (tableNum: number) => {
-    setAuth(true, 'wasit', tenantCode, tableNum);
-    router.push('/wasit/live');
+  const handleGenerateNewPin = async (tableId: string) => {
+    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: tableId,
+          pinCode: newPin,
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTables();
+      }
+    } catch (err: any) {
+      console.error('Failed to update PIN:', err);
+    }
   };
 
   const handleStartEdit = (tableId: string, currentName: string) => {
@@ -83,16 +143,49 @@ export default function AdminDashboardPage() {
     setEditingTableName(currentName);
   };
 
-  const handleSaveEditName = (tableId: string) => {
-    if (editingTableName.trim()) {
-      updateTableName(tableId, editingTableName.trim());
+  const handleSaveEditName = async (tableId: string) => {
+    if (!editingTableName.trim()) return;
+
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: tableId,
+          tableName: editingTableName.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTables();
+      }
+    } catch (err: any) {
+      console.error('Failed to update table name:', err);
+    } finally {
+      setEditingTableId(null);
     }
-    setEditingTableId(null);
   };
 
-  const handleDeleteTableConfirm = (tableId: string) => {
-    deleteMasterTable(tableId);
-    setDeleteConfirmTableId(null);
+  const handleDeleteTableConfirm = async (tableId: string) => {
+    try {
+      const res = await fetch(`/api/tables?id=${tableId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTables();
+        setDeleteConfirmTableId(null);
+      } else {
+        alert(`Gagal menghapus meja: ${json.message}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi kesalahan: ${err.message}`);
+    }
+  };
+
+  const handleEnterWasitTable = (tableNum: number) => {
+    setAuth(true, 'wasit', tenantCode, tableNum);
+    router.push('/wasit/live');
   };
 
   return (
@@ -114,6 +207,14 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={fetchTables}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            title="Refresh Meja dari Database"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+
           <Link
             href="/admin/logs"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-600/20 transition-all active:scale-95"
@@ -143,142 +244,152 @@ export default function AdminDashboardPage() {
 
       {/* Table Master Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {masterTables.map((table) => {
-          const tMatch = getTableMatch(table.tableNumber);
-          const isSetupDone = tMatch && tMatch.status === 'in_progress';
-          const roundsCount = tMatch?.rounds?.length || 0;
-          const isEditing = editingTableId === table.id;
+        {isLoading ? (
+          <div className="col-span-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-mono font-bold">
+            Memuat data meja dari Supabase Database...
+          </div>
+        ) : masterTables.length === 0 ? (
+          <div className="col-span-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-mono font-bold">
+            Belum ada meja tersimpan di database. Klik tombol "TAMBAH MEJA BARU" di atas.
+          </div>
+        ) : (
+          masterTables.map((table) => {
+            const tMatch = getTableMatch(table.tableNumber);
+            const isSetupDone = tMatch && tMatch.status === 'in_progress';
+            const roundsCount = tMatch?.rounds?.length || 0;
+            const isEditing = editingTableId === table.id;
 
-          return (
-            <div
-              key={table.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between relative overflow-hidden"
-            >
-              <div>
-                {/* Header Row: Table #, Status Badge, Edit & Delete Buttons */}
-                <div className="flex items-center justify-between mb-3 gap-2">
-                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-950 text-slate-400 border border-slate-800">
-                    MEJA #{table.tableNumber}
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                        isSetupDone && roundsCount > 0
-                          ? 'bg-emerald-950 text-emerald-400 border-emerald-800/80 animate-pulse'
-                          : isSetupDone
-                          ? 'bg-blue-950 text-blue-300 border-blue-800'
-                          : 'bg-slate-950 text-slate-500 border-slate-800'
-                      }`}
-                    >
-                      {isSetupDone && roundsCount > 0
-                        ? '● SESI AKTIF'
-                        : isSetupDone
-                        ? 'SIAP MAIN'
-                        : 'BELUM SETUP'}
+            return (
+              <div
+                key={table.id}
+                className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between relative overflow-hidden"
+              >
+                <div>
+                  {/* Header Row: Table #, Status Badge, Edit & Delete Buttons */}
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-950 text-slate-400 border border-slate-800">
+                      MEJA #{table.tableNumber}
                     </span>
 
-                    {/* Edit Name Button */}
-                    <button
-                      onClick={() => handleStartEdit(table.id, table.tableName)}
-                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 transition-colors"
-                      title="Edit Nama Meja"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                          isSetupDone && roundsCount > 0
+                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800/80 animate-pulse'
+                            : isSetupDone
+                            ? 'bg-blue-950 text-blue-300 border-blue-800'
+                            : 'bg-slate-950 text-slate-500 border-slate-800'
+                        }`}
+                      >
+                        {isSetupDone && roundsCount > 0
+                          ? '● SESI AKTIF'
+                          : isSetupDone
+                          ? 'SIAP MAIN'
+                          : 'BELUM SETUP'}
+                      </span>
 
-                    {/* Delete Table Button */}
-                    <button
-                      onClick={() => setDeleteConfirmTableId(table.id)}
-                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
-                      title="Hapus Meja"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+                      {/* Edit Name Button */}
+                      <button
+                        onClick={() => handleStartEdit(table.id, table.tableName)}
+                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 transition-colors"
+                        title="Edit Nama Meja"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
 
-                {/* Table Title / Inline Edit Field */}
-                {isEditing ? (
-                  <div className="flex items-center gap-1.5 my-1">
-                    <input
-                      type="text"
-                      value={editingTableName}
-                      onChange={(e) => setEditingTableName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEditName(table.id)}
-                      className="bg-slate-950 border border-cyan-500 rounded-lg px-2.5 py-1 text-sm font-extrabold text-white focus:outline-none w-full"
-                      autoFocus
-                    />
-                    <button
-                      onClick={() => handleSaveEditName(table.id)}
-                      className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold"
-                      title="Simpan"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setEditingTableId(null)}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold"
-                      title="Batal"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <h3 className="text-base font-extrabold text-white">{table.tableName}</h3>
-                )}
-
-                <p className="text-xs text-slate-400 font-mono mt-1">
-                  {isSetupDone
-                    ? `Berjalan (${roundsCount} Ronde)`
-                    : 'Data Kosong (Perlu Setup)'}
-                </p>
-
-                {/* Show Players if setup */}
-                {isSetupDone && tMatch.players && (
-                  <div className="mt-3 text-[11px] font-mono text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Pemain Meja #{table.tableNumber}:</span>
-                    <div className="grid grid-cols-2 gap-1 text-[11px] font-semibold text-slate-200">
-                      {tMatch.players.map((p) => (
-                        <div key={p.id} className="truncate">
-                          • {p.name}
-                        </div>
-                      ))}
+                      {/* Delete Table Button */}
+                      <button
+                        onClick={() => setDeleteConfirmTableId(table.id)}
+                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                        title="Hapus Meja"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-3">
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between font-mono">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">
-                      PIN WASIT MEJA
-                    </span>
-                    <span className="text-lg font-black text-cyan-400 tracking-wider">
-                      {table.pinCode}
-                    </span>
+                  {/* Table Title / Inline Edit Field */}
+                  {isEditing ? (
+                    <div className="flex items-center gap-1.5 my-1">
+                      <input
+                        type="text"
+                        value={editingTableName}
+                        onChange={(e) => setEditingTableName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEditName(table.id)}
+                        className="bg-slate-950 border border-cyan-500 rounded-lg px-2.5 py-1 text-sm font-extrabold text-white focus:outline-none w-full"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSaveEditName(table.id)}
+                        className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold"
+                        title="Simpan"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setEditingTableId(null)}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold"
+                        title="Batal"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <h3 className="text-base font-extrabold text-white">{table.tableName}</h3>
+                  )}
+
+                  <p className="text-xs text-slate-400 font-mono mt-1">
+                    {isSetupDone
+                      ? `Berjalan (${roundsCount} Ronde)`
+                      : 'Data Kosong (Perlu Setup)'}
+                  </p>
+
+                  {/* Show Players if setup */}
+                  {isSetupDone && tMatch.players && (
+                    <div className="mt-3 text-[11px] font-mono text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold block mb-1">Pemain Meja #{table.tableNumber}:</span>
+                      <div className="grid grid-cols-2 gap-1 text-[11px] font-semibold text-slate-200">
+                        {tMatch.players.map((p) => (
+                          <div key={p.id} className="truncate">
+                            • {p.name}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-800/80 space-y-3">
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between font-mono">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 block uppercase">
+                        PIN WASIT MEJA
+                      </span>
+                      <span className="text-lg font-black text-cyan-400 tracking-wider">
+                        {table.pinCode}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleGenerateNewPin(table.id)}
+                      className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      title="Generate PIN Baru"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
                   </div>
 
                   <button
-                    onClick={() => handleGenerateNewPin(table.id)}
-                    className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                    title="Generate PIN Baru"
+                    onClick={() => handleEnterWasitTable(table.tableNumber)}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-700 shadow-md"
                   >
-                    <RefreshCw className="w-4 h-4" />
+                    <KeyRound className="w-3.5 h-3.5 text-cyan-400" /> MASUK WASIT MEJA #{table.tableNumber}
                   </button>
                 </div>
-
-                <button
-                  onClick={() => handleEnterWasitTable(table.tableNumber)}
-                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-700 shadow-md"
-                >
-                  <KeyRound className="w-3.5 h-3.5 text-cyan-400" /> MASUK WASIT MEJA #{table.tableNumber}
-                </button>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* Quota Exceeded Notification Modal */}
@@ -328,7 +439,7 @@ export default function AdminDashboardPage() {
             </div>
             <h3 className="text-xl font-extrabold text-white">Hapus Meja Ini?</h3>
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
-              Meja ini dan seluruh data sesinya akan dihapus secara permanen dari daftar pengelola admin.
+              Meja ini dan seluruh data sesinya akan dihapus secara permanen dari basis data Supabase PostgreSQL.
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button

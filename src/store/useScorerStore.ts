@@ -101,6 +101,7 @@ interface ScorerStore {
   updatePlayerNames: (playersInput: { seatNumber: 1 | 2 | 3 | 4; name: string }[]) => void;
   updateTablePin: (tableId: string, newPin: string) => void;
   updateTableName: (tableId: string, newTableName: string) => void;
+  setMasterTables: (tables: TableMaster[]) => void;
   addMasterTable: () => void;
   deleteMasterTable: (tableId: string) => void;
 
@@ -219,6 +220,9 @@ export const useScorerStore = create<ScorerStore>()(
           ),
         }));
       },
+
+      setMasterTables: (tables) => set({ masterTables: tables }),
+
 
       addMasterTable: () => {
         set((state) => {
