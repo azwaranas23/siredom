@@ -168,7 +168,14 @@ export default function LoginPage() {
                   <input
                     type="number"
                     value={tableInput}
-                    onChange={(e) => setTableInput(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setTableInput('');
+                      } else {
+                        setTableInput(val.replace(/^0+(?=\d)/, ''));
+                      }
+                    }}
                     className="w-full bg-gray-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-extrabold focus:outline-none focus:border-cyan-500"
                     min={1}
                     max={25}

@@ -85,7 +85,7 @@ export async function createTable(tenantCode: string, tableName?: string) {
 
     const nextTableNum = tenant.tableMasters.reduce((max, t) => Math.max(max, t.tableNumber), 0) + 1;
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
-    const name = tableName || `Meja ${nextTableNum <= 2 ? 'Reguler' : 'VIP'} ${nextTableNum < 10 ? '0' + nextTableNum : nextTableNum}`;
+    const name = tableName || `Meja ${nextTableNum}`;
 
     const newTable = await prisma.tableMaster.create({
       data: {

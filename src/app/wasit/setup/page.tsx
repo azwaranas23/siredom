@@ -21,7 +21,7 @@ export default function WasitSetupPage() {
     match.players.map((p) => ({ seatNumber: p.seatNumber, name: p.name }))
   );
   const [matchMode, setMatchMode] = useState<'rounds' | 'points'>(match.matchMode);
-  const [targetValue, setTargetValue] = useState<number>(match.targetValue);
+  const [targetValue, setTargetValue] = useState<number | string>(match.targetValue);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig>(match.pointsConfig);
 
   const handlePlayerNameChange = (seatNumber: 1 | 2 | 3 | 4, name: string) => {
@@ -39,7 +39,8 @@ export default function WasitSetupPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMatchSetup(players, matchMode, targetValue, pointsConfig);
+    const finalTargetValue = Number(targetValue) || (matchMode === 'rounds' ? 10 : 50);
+    updateMatchSetup(players, matchMode, finalTargetValue, pointsConfig);
     router.push('/wasit/live');
   };
 
@@ -144,7 +145,14 @@ export default function WasitSetupPage() {
                 <input
                   type="number"
                   value={targetValue}
-                  onChange={(e) => setTargetValue(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setTargetValue('');
+                    } else {
+                      setTargetValue(val.replace(/^0+(?=\d)/, ''));
+                    }
+                  }}
                   min={1}
                   max={200}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-extrabold text-base focus:outline-none focus:border-cyan-500"

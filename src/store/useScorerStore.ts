@@ -20,53 +20,25 @@ const DEFAULT_POINTS_CONFIG: PointsConfig = {
   duduk: 0,
 };
 
-const DEFAULT_PLAYERS: Player[] = [
-  { id: 'p1', seatNumber: 1, name: 'Maman', currentScore: 0 },
-  { id: 'p2', seatNumber: 2, name: 'Topati', currentScore: 0 },
-  { id: 'p3', seatNumber: 3, name: 'Fatir', currentScore: 0 },
-  { id: 'p4', seatNumber: 4, name: 'Udin', currentScore: 0 },
-];
-
-const DEFAULT_TENANTS: TenantMaster[] = [
-  { id: 't-0', name: 'Tab Slowbar Coffee', code: 'TAB-SLOWBAR', subscriptionPlan: 'pro', status: 'active', maxTables: 10, activeMatches: 0, adminEmail: 'admin@tabslowbar.com', adminPassword: 'password123' },
-];
-
+const DEFAULT_TENANTS: TenantMaster[] = [];
 const DEFAULT_MASTER_TABLES: TableMaster[] = [];
-
-
-
-
-const INITIAL_MATCH_TABLE_1: Match = {
-  id: 'match-table-1',
-  tenantId: 'tenant-warkop-a',
-  tableNumber: 1,
-  matchMode: 'rounds',
-  targetValue: 10,
-  pointsConfig: DEFAULT_POINTS_CONFIG,
-  status: 'in_progress',
-  players: DEFAULT_PLAYERS,
-  rounds: [],
-};
 
 const createEmptyTableMatch = (tableNum: number): Match => ({
   id: `match-table-${tableNum}`,
-  tenantId: 'tenant-warkop-a',
+  tenantId: 'tenant-tab-slowbar',
   tableNumber: tableNum,
   matchMode: 'rounds',
   targetValue: 10,
   pointsConfig: DEFAULT_POINTS_CONFIG,
   status: 'setup',
-  players: [
-    { id: `t${tableNum}-p1`, seatNumber: 1, name: `Kursi 1 (Merah)`, currentScore: 0 },
-    { id: `t${tableNum}-p2`, seatNumber: 2, name: `Kursi 2 (Biru)`, currentScore: 0 },
-    { id: `t${tableNum}-p3`, seatNumber: 3, name: `Kursi 3 (Hijau)`, currentScore: 0 },
-    { id: `t${tableNum}-p4`, seatNumber: 4, name: `Kursi 4 (Kuning)`, currentScore: 0 },
-  ],
+  players: [],
   rounds: [],
 });
 
+const INITIAL_MATCH_TABLE_1: Match = createEmptyTableMatch(1);
+
 const DEFAULT_TABLE_SESSIONS: Record<number, Match> = {
-  1: INITIAL_MATCH_TABLE_1,
+  1: createEmptyTableMatch(1),
   2: createEmptyTableMatch(2),
   3: createEmptyTableMatch(3),
   4: createEmptyTableMatch(4),

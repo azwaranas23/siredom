@@ -38,39 +38,12 @@ export async function GET(req: Request) {
       },
     });
 
-    // If no active match exists, create one with default 4 players
+    // If no active match exists, return null data so frontend knows the table is unconfigured (Belum Setup)
     if (!match) {
-      match = await prisma.matchSession.create({
-        data: {
-          tenantId: tenant.id,
-          tableId: table.id,
-          tableNumber,
-          matchMode: 'ROUNDS',
-          targetValue: 10,
-          status: 'IN_PROGRESS',
-          pointsConfig: {
-            menangBiasa: 1,
-            kandang: 2,
-            ceki: 3,
-            palang: 4,
-            tangkap: 3,
-          },
-          players: {
-            create: [
-              { seatNumber: 1, name: 'Maman', currentScore: 0 },
-              { seatNumber: 2, name: 'Topati', currentScore: 0 },
-              { seatNumber: 3, name: 'Fatir', currentScore: 0 },
-              { seatNumber: 4, name: 'Udin', currentScore: 0 },
-            ],
-          },
-        },
-        include: {
-          players: { orderBy: { seatNumber: 'asc' } },
-          rounds: {
-            include: { scores: true },
-            orderBy: { roundNumber: 'desc' },
-          },
-        },
+      return NextResponse.json({
+        status: 'success',
+        data: null,
+        message: `Belum ada sesi pertandingan aktif di Meja #${tableNumber}`,
       });
     }
 
