@@ -9,6 +9,11 @@
 /build
 /dist
 
+/docs/
+docs
+.docs
+/.docs
+
 # Environment Variables & Secrets
 .env
 .env*.local
