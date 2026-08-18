@@ -28,20 +28,13 @@ const DEFAULT_PLAYERS: Player[] = [
 ];
 
 const DEFAULT_TENANTS: TenantMaster[] = [
-  { id: 't-0', name: 'Tab Slowbar Coffee', code: 'TAB-SLOWBAR', subscriptionPlan: 'pro', status: 'active', maxTables: 10, activeMatches: 2, adminEmail: 'tab.slowbar@gmail.com', adminPassword: 'password123' },
-  { id: 't-1', name: 'Warkop Kopi Joss Makassar', code: 'WARKOP-A', subscriptionPlan: 'pro', status: 'active', maxTables: 10, activeMatches: 3, adminEmail: 'admin@warkopa.com', adminPassword: 'password123' },
-  { id: 't-2', name: 'Warkop Dg Sija Panakkukang', code: 'SIJA-PNK', subscriptionPlan: 'enterprise', status: 'active', maxTables: 25, activeMatches: 8, adminEmail: 'admin@sija.com', adminPassword: 'password123' },
-  { id: 't-3', name: 'Warkop Phoenam Losari', code: 'PHOENAM-01', subscriptionPlan: 'basic', status: 'active', maxTables: 5, activeMatches: 1, adminEmail: 'admin@phoenam.com', adminPassword: 'password123' },
-  { id: 't-4', name: 'Cafe Domino Toddopuli', code: 'CAFE-TODD', subscriptionPlan: 'pro', status: 'suspended', maxTables: 10, activeMatches: 0, adminEmail: 'admin@toddopuli.com', adminPassword: 'password123' },
+  { id: 't-0', name: 'Tab Slowbar Coffee', code: 'TAB-SLOWBAR', subscriptionPlan: 'pro', status: 'active', maxTables: 10, activeMatches: 0, adminEmail: 'admin@tabslowbar.com', adminPassword: 'password123' },
 ];
-
 
 const DEFAULT_MASTER_TABLES: TableMaster[] = [
-  { id: 'tbl-1', tenantId: 'tenant-warkop-a', tableNumber: 1, tableName: 'Meja Utama 01', pinCode: '1234', status: 'active' },
-  { id: 'tbl-2', tenantId: 'tenant-warkop-a', tableNumber: 2, tableName: 'Meja VIP 02', pinCode: '5678', status: 'idle' },
-  { id: 'tbl-3', tenantId: 'tenant-warkop-a', tableNumber: 3, tableName: 'Meja Reguler 03', pinCode: '9988', status: 'idle' },
-  { id: 'tbl-4', tenantId: 'tenant-warkop-a', tableNumber: 4, tableName: 'Meja Reguler 04', pinCode: '4321', status: 'idle' },
+  { id: 'tbl-1', tenantId: 'tenant-tab-slowbar', tableNumber: 1, tableName: 'Meja Utama 01', pinCode: '1234', status: 'active' },
 ];
+
 
 
 const INITIAL_MATCH_TABLE_1: Match = {

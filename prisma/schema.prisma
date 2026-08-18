@@ -1,5 +1,5 @@
 // Prisma schema for SIREDOM (Sistem Rekapitulasi Domino)
-// Managed MySQL Database setup
+// Managed PostgreSQL Database setup (Supabase Cloud DB)
 
 generator client {
   provider = "prisma-client-js"
@@ -8,8 +8,8 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
-
 
 enum Role {
   SUPER_ADMIN
@@ -17,14 +17,9 @@ enum Role {
   WASIT
 }
 
-enum MatchType {
-  INDIVIDUAL_1V1V1V1
-  TEAMS_2V2
-}
-
-enum TargetType {
-  FIXED_ROUNDS
-  RACE_TO_POINTS
+enum MatchMode {
+  ROUNDS
+  POINTS
 }
 
 enum MatchStatus {
@@ -42,30 +37,26 @@ enum ActionType {
   TANGKAP
 }
 
-enum RoundPlayerStatusTag {
-  WINNER
-  SECONDARY_WINNER
-  GOAT
-  TANGKAP_VICTIM
-  BERDIRI
-  DUDUK
-}
-
+// 1. Tabel Master Tenant (SaaS Warkop / Cafe Mitra)
 model Tenant {
-  id               String         @id @default(uuid())
-  name             String
-  slug             String         @unique
-  code             String         @unique
-  subscriptionPlan String         @default("pro") // basic, pro, enterprise
-  status           String         @default("active") // active, suspended, expired
-  maxTables        Int            @default(10)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  users            User[]
-  tableMasters     TableMaster[]
-  matchSessions    MatchSession[]
+  id                String         @id @default(uuid())
+  name              String
+  slug              String         @unique
+  code              String         @unique
+  adminEmail        String         @default("admin@tabslowbar.com")
+  adminPasswordHash String         @default("$2b$10$/nCfsjyVRAZ.n8m3YEMlZO9tKFMMg93dufln4JBs45CDlBB/Xvur2")
+  subscriptionPlan  String         @default("pro") // basic, pro, enterprise
+  status            String         @default("active") // active, suspended, expired
+  maxTables         Int            @default(10)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  users             User[]
+  tableMasters      TableMaster[]
+  matchSessions     MatchSession[]
 }
 
+// 2. Tabel Pengguna (Superadmin, Cafe Admin, & Wasit Login)
 model User {
   id           String   @id @default(uuid())
   tenantId     String?
@@ -76,16 +67,17 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
+// 3. Tabel Master Meja Wasit Per Tenant
 model TableMaster {
   id            String         @id @default(uuid())
   tenantId      String
   tableNumber   Int
   tableName     String
-  pinCode       String         // 4-digit PIN for Wasit login
-  status        String         @default("idle") // idle, active, maintenance
+  pinCode       String         // 4-digit PIN Wasit Login
+  status        String         @default("active") // active, idle, maintenance
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -95,13 +87,15 @@ model TableMaster {
   @@unique([tenantId, tableNumber])
 }
 
+// 4. Tabel Sesi Pertandingan Live Per Meja
 model MatchSession {
   id          String       @id @default(uuid())
   tenantId    String
   tableId     String
-  matchType   MatchType    @default(INDIVIDUAL_1V1V1V1)
-  targetType  TargetType   @default(FIXED_ROUNDS)
+  tableNumber Int          @default(1)
+  matchMode   MatchMode    @default(ROUNDS)
   targetValue Int          @default(10)
+  pointsConfig Json?       // Konfigurasi Poin (+1, +2, +3, +4, -3)
   status      MatchStatus  @default(IN_PROGRESS)
   winnerId    String?
   createdAt   DateTime     @default(now())
@@ -113,30 +107,31 @@ model MatchSession {
   rounds      Round[]
 }
 
+// 5. Tabel Pemain Pertandingan (4 Kursi Per Meja)
 model Player {
-  id              String       @id @default(uuid())
-  matchId         String
-  seatNumber      Int          // 1: Red, 2: Blue, 3: Green, 4: Yellow
-  name            String
-  cumulativeScore Int          @default(0)
-  team            String?      // Optional team identifier for 2v2
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id           String       @id @default(uuid())
+  matchId      String
+  seatNumber   Int          // 1: Merah, 2: Biru, 3: Hijau, 4: Kuning
+  name         String
+  currentScore Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  match           MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  roundScores     RoundScore[]
+  match        MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  roundScores  RoundScore[]
 
   @@unique([matchId, seatNumber])
 }
 
+// 6. Tabel History Ronde Pertandingan
 model Round {
   id             String       @id @default(uuid())
   matchId        String
   roundNumber    Int
   actionType     ActionType
   winnerPlayerId String
-  victimPlayerId String?
-  createdAt      DateTime     @default(now())
+  victimPlayerId String?      // Khusus aksi 'tangkap'
+  timestamp      DateTime     @default(now())
 
   match          MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
   scores         RoundScore[]
@@ -144,14 +139,15 @@ model Round {
   @@unique([matchId, roundNumber])
 }
 
+// 7. Tabel Rincian Skor & Status Player Per Ronde
 model RoundScore {
-  id            String               @id @default(uuid())
+  id            String   @id @default(uuid())
   roundId       String
   playerId      String
-  statusTag     RoundPlayerStatusTag
+  statusTag     String   // 'menang', 'ditangkap', 'berdiri', 'duduk'
   pointsAwarded Int
   scoreAfter    Int
 
-  round         Round                @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  player        Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  round         Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }

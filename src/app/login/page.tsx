@@ -12,7 +12,8 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<'wasit' | 'admin'>('wasit');
   const [pin, setPin] = useState('');
-  const [tenantInput, setTenantInput] = useState(tenantCode || 'WARKOP-A');
+  const [tenantInput, setTenantInput] = useState(tenantCode || 'TAB-SLOWBAR');
+
   const [tableInput, setTableInput] = useState<number | string>(tableNumber || 1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -86,8 +87,9 @@ export default function LoginPage() {
 
     // Fallback check for legacy defaults
     const isLegacyDefault =
-      (inputEmail === 'admin@warkopa.com' || inputEmail === 'tab.slowbar@gmail.com' || inputEmail === 'admin@warkop.com') &&
+      (inputEmail === 'admin@tabslowbar.com' || inputEmail === 'admin@warkopa.com' || inputEmail === 'tab.slowbar@gmail.com' || inputEmail === 'admin@warkop.com') &&
       password === 'password123';
+
 
     if (!matchedTenantObj && !isLegacyDefault) {
       setErrorMsg('Akun Cafe Admin tidak terdaftar atau password salah!');
