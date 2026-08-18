@@ -1,0 +1,157 @@
+// Prisma schema for SIREDOM (Sistem Rekapitulasi Domino)
+// Managed MySQL Database setup
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  WASIT
+}
+
+enum MatchType {
+  INDIVIDUAL_1V1V1V1
+  TEAMS_2V2
+}
+
+enum TargetType {
+  FIXED_ROUNDS
+  RACE_TO_POINTS
+}
+
+enum MatchStatus {
+  SETUP
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ActionType {
+  MENANG_BIASA
+  KANDANG
+  CEKI
+  PALANG
+  TANGKAP
+}
+
+enum RoundPlayerStatusTag {
+  WINNER
+  SECONDARY_WINNER
+  GOAT
+  TANGKAP_VICTIM
+  BERDIRI
+  DUDUK
+}
+
+model Tenant {
+  id               String         @id @default(uuid())
+  name             String
+  slug             String         @unique
+  code             String         @unique
+  subscriptionPlan String         @default("pro") // basic, pro, enterprise
+  status           String         @default("active") // active, suspended, expired
+  maxTables        Int            @default(10)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  users            User[]
+  tableMasters     TableMaster[]
+  matchSessions    MatchSession[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String?
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TableMaster {
+  id            String         @id @default(uuid())
+  tenantId      String
+  tableNumber   Int
+  tableName     String
+  pinCode       String         // 4-digit PIN for Wasit login
+  status        String         @default("idle") // idle, active, maintenance
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  matchSessions MatchSession[]
+
+  @@unique([tenantId, tableNumber])
+}
+
+model MatchSession {
+  id          String       @id @default(uuid())
+  tenantId    String
+  tableId     String
+  matchType   MatchType    @default(INDIVIDUAL_1V1V1V1)
+  targetType  TargetType   @default(FIXED_ROUNDS)
+  targetValue Int          @default(10)
+  status      MatchStatus  @default(IN_PROGRESS)
+  winnerId    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table       TableMaster  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  players     Player[]
+  rounds      Round[]
+}
+
+model Player {
+  id              String       @id @default(uuid())
+  matchId         String
+  seatNumber      Int          // 1: Red, 2: Blue, 3: Green, 4: Yellow
+  name            String
+  cumulativeScore Int          @default(0)
+  team            String?      // Optional team identifier for 2v2
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  match           MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  roundScores     RoundScore[]
+
+  @@unique([matchId, seatNumber])
+}
+
+model Round {
+  id             String       @id @default(uuid())
+  matchId        String
+  roundNumber    Int
+  actionType     ActionType
+  winnerPlayerId String
+  victimPlayerId String?
+  createdAt      DateTime     @default(now())
+
+  match          MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  scores         RoundScore[]
+
+  @@unique([matchId, roundNumber])
+}
+
+model RoundScore {
+  id            String               @id @default(uuid())
+  roundId       String
+  playerId      String
+  statusTag     RoundPlayerStatusTag
+  pointsAwarded Int
+  scoreAfter    Int
+
+  round         Round                @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player        Player               @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
