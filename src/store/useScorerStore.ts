@@ -31,9 +31,8 @@ const DEFAULT_TENANTS: TenantMaster[] = [
   { id: 't-0', name: 'Tab Slowbar Coffee', code: 'TAB-SLOWBAR', subscriptionPlan: 'pro', status: 'active', maxTables: 10, activeMatches: 0, adminEmail: 'admin@tabslowbar.com', adminPassword: 'password123' },
 ];
 
-const DEFAULT_MASTER_TABLES: TableMaster[] = [
-  { id: 'tbl-1', tenantId: 'tenant-tab-slowbar', tableNumber: 1, tableName: 'Meja Utama 01', pinCode: '1234', status: 'active' },
-];
+const DEFAULT_MASTER_TABLES: TableMaster[] = [];
+
 
 
 

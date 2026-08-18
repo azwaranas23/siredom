@@ -1,17 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, KeyRound, Tv, Plus, RefreshCw, Pencil, Trash2, Check, X, FileText, AlertTriangle } from 'lucide-react';
 import { TableMaster } from '@/types/domino';
-
-const PLAN_MAX_TABLES: Record<string, number> = {
-  basic: 5,
-  pro: 10,
-  enterprise: 25,
-};
+import {
+  getTablesByTenant,
+  createTable,
+  updateTableName as updateTableNameAction,
+  updateTablePin as updateTablePinAction,
+  deleteTable as deleteTableAction,
+} from '@/app/actions/tableActions';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -27,115 +28,71 @@ export default function AdminDashboardPage() {
   const [editingTableName, setEditingTableName] = useState<string>('');
   const [deleteConfirmTableId, setDeleteConfirmTableId] = useState<string | null>(null);
 
+  // Server Action Loading & Transition states
+  const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(true);
+
   // Quota & Plan Enforcement States
   const [tenantInfo, setTenantInfo] = useState<{ subscriptionPlan: string; maxTables: number } | null>(null);
   const [isQuotaExceededModalOpen, setIsQuotaExceededModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch Tables from Supabase PostgreSQL API
-  const fetchTables = async () => {
+  // Fetch Tables & Tenant Info via Server Action on mount & tenantCode change
+  const loadData = async () => {
     setIsLoading(true);
     try {
       const codeToUse = tenantCode || 'TAB-SLOWBAR';
-      const res = await fetch(`/api/tables?tenantCode=${codeToUse}`);
-      const json = await res.json();
-      if (json.status === 'success' && Array.isArray(json.data)) {
-        const formattedTables: TableMaster[] = json.data.map((t: any) => ({
-          id: t.id,
-          tenantId: t.tenantId,
-          tableNumber: t.tableNumber,
-          tableName: t.tableName,
-          pinCode: t.pinCode,
-          status: t.status as any,
-        }));
-        setMasterTables(formattedTables);
+      const res = await getTablesByTenant(codeToUse);
+
+      if (res.success) {
+        setMasterTables(res.data || []);
+        if (res.tenantInfo) {
+          setTenantInfo({
+            subscriptionPlan: res.tenantInfo.subscriptionPlan,
+            maxTables: res.tenantInfo.maxTables,
+          });
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch tables:', err);
+      console.error('Failed to load table data via Server Action:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch Tenant Info from DB API to know current quota limit
-  const fetchTenantInfo = async () => {
-    try {
-      const res = await fetch('/api/tenants');
-      const json = await res.json();
-      if (json.status === 'success' && Array.isArray(json.data)) {
-        const matched = json.data.find((t: any) => t.code.toUpperCase() === (tenantCode || 'TAB-SLOWBAR').toUpperCase());
-        if (matched) {
-          setTenantInfo({
-            subscriptionPlan: matched.subscriptionPlan,
-            maxTables: PLAN_MAX_TABLES[matched.subscriptionPlan] || matched.maxTables || 10,
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch tenant info:', err);
-    }
-  };
-
   useEffect(() => {
-    fetchTables();
-    fetchTenantInfo();
+    loadData();
   }, [tenantCode]);
 
-  const maxTablesLimit = tenantInfo?.maxTables || PLAN_MAX_TABLES[tenantInfo?.subscriptionPlan || 'pro'] || 10;
+  const maxTablesLimit = tenantInfo?.maxTables || 10;
   const currentTableCount = masterTables.length;
 
-  const handleAddNewTable = async () => {
-    // Check Table Quota Limit
+  const handleAddNewTable = () => {
     if (currentTableCount >= maxTablesLimit) {
       setIsQuotaExceededModalOpen(true);
       return;
     }
 
-    const nextTableNum = masterTables.reduce((max, t) => Math.max(max, t.tableNumber), 0) + 1;
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-    const newName = `Meja ${nextTableNum <= 2 ? 'Reguler' : 'VIP'} ${nextTableNum < 10 ? '0' + nextTableNum : nextTableNum}`;
+    startTransition(async () => {
+      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+      const res = await createTable(codeToUse);
 
-    try {
-      const res = await fetch('/api/tables', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantCode: tenantCode || 'TAB-SLOWBAR',
-          tableNumber: nextTableNum,
-          tableName: newName,
-          pinCode: newPin,
-        }),
-      });
-
-      const json = await res.json();
-      if (json.status === 'success') {
-        await fetchTables();
+      if (res.success) {
+        await loadData();
+      } else if (res.isQuotaExceeded) {
+        setIsQuotaExceededModalOpen(true);
       } else {
-        alert(`Gagal menambah meja: ${json.message}`);
+        alert(res.error || 'Gagal membuat meja');
       }
-    } catch (err: any) {
-      alert(`Terjadi kesalahan: ${err.message}`);
-    }
+    });
   };
 
-  const handleGenerateNewPin = async (tableId: string) => {
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-    try {
-      const res = await fetch('/api/tables', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: tableId,
-          pinCode: newPin,
-        }),
-      });
-      const json = await res.json();
-      if (json.status === 'success') {
-        await fetchTables();
+  const handleGenerateNewPin = (tableId: string) => {
+    startTransition(async () => {
+      const res = await updateTablePinAction(tableId);
+      if (res.success) {
+        await loadData();
       }
-    } catch (err: any) {
-      console.error('Failed to update PIN:', err);
-    }
+    });
   };
 
   const handleStartEdit = (tableId: string, currentName: string) => {
@@ -143,44 +100,28 @@ export default function AdminDashboardPage() {
     setEditingTableName(currentName);
   };
 
-  const handleSaveEditName = async (tableId: string) => {
+  const handleSaveEditName = (tableId: string) => {
     if (!editingTableName.trim()) return;
 
-    try {
-      const res = await fetch('/api/tables', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: tableId,
-          tableName: editingTableName.trim(),
-        }),
-      });
-      const json = await res.json();
-      if (json.status === 'success') {
-        await fetchTables();
+    startTransition(async () => {
+      const res = await updateTableNameAction(tableId, editingTableName.trim());
+      if (res.success) {
+        await loadData();
       }
-    } catch (err: any) {
-      console.error('Failed to update table name:', err);
-    } finally {
       setEditingTableId(null);
-    }
+    });
   };
 
-  const handleDeleteTableConfirm = async (tableId: string) => {
-    try {
-      const res = await fetch(`/api/tables?id=${tableId}`, {
-        method: 'DELETE',
-      });
-      const json = await res.json();
-      if (json.status === 'success') {
-        await fetchTables();
+  const handleDeleteTableConfirm = (tableId: string) => {
+    startTransition(async () => {
+      const res = await deleteTableAction(tableId);
+      if (res.success) {
+        await loadData();
         setDeleteConfirmTableId(null);
       } else {
-        alert(`Gagal menghapus meja: ${json.message}`);
+        alert(res.error || 'Gagal menghapus meja');
       }
-    } catch (err: any) {
-      alert(`Terjadi kesalahan: ${err.message}`);
-    }
+    });
   };
 
   const handleEnterWasitTable = (tableNum: number) => {
@@ -208,11 +149,12 @@ export default function AdminDashboardPage() {
 
         <div className="flex items-center gap-3 flex-wrap">
           <button
-            onClick={fetchTables}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            title="Refresh Meja dari Database"
+            onClick={loadData}
+            disabled={isLoading || isPending}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-50"
+            title="Refresh Meja dari Prisma Database"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading || isPending ? 'animate-spin' : ''}`} />
           </button>
 
           <Link
@@ -224,7 +166,8 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={handleAddNewTable}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-lg transition-all active:scale-95 ${
+            disabled={isPending}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
               currentTableCount >= maxTablesLimit
                 ? 'bg-amber-600/80 hover:bg-amber-600 text-slate-950 shadow-amber-600/20'
                 : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-emerald-600/20'
@@ -246,7 +189,7 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {isLoading ? (
           <div className="col-span-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-mono font-bold">
-            Memuat data meja dari Supabase Database...
+            Memuat data meja dari Supabase PostgreSQL via Server Action...
           </div>
         ) : masterTables.length === 0 ? (
           <div className="col-span-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-mono font-bold">
@@ -321,7 +264,8 @@ export default function AdminDashboardPage() {
                       />
                       <button
                         onClick={() => handleSaveEditName(table.id)}
-                        className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold"
+                        disabled={isPending}
+                        className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold disabled:opacity-50"
                         title="Simpan"
                       >
                         <Check className="w-4 h-4" />
@@ -372,10 +316,11 @@ export default function AdminDashboardPage() {
 
                     <button
                       onClick={() => handleGenerateNewPin(table.id)}
-                      className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      disabled={isPending}
+                      className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
                       title="Generate PIN Baru"
                     >
-                      <RefreshCw className="w-4 h-4" />
+                      <RefreshCw className={`w-4 h-4 ${isPending ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
 
@@ -439,7 +384,7 @@ export default function AdminDashboardPage() {
             </div>
             <h3 className="text-xl font-extrabold text-white">Hapus Meja Ini?</h3>
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
-              Meja ini dan seluruh data sesinya akan dihapus secara permanen dari basis data Supabase PostgreSQL.
+              Meja ini dan seluruh data sesinya akan dihapus secara permanen dari basis data Supabase PostgreSQL via Server Action.
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
@@ -450,7 +395,8 @@ export default function AdminDashboardPage() {
               </button>
               <button
                 onClick={() => handleDeleteTableConfirm(deleteConfirmTableId)}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all"
+                disabled={isPending}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50"
               >
                 Ya, Hapus Meja
               </button>
