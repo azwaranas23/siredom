@@ -1,11 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, KeyRound, Tv, Plus, RefreshCw, Pencil, Trash2, Check, X, FileText } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Tv, Plus, RefreshCw, Pencil, Trash2, Check, X, FileText, AlertTriangle, Building2 } from 'lucide-react';
 
+const PLAN_MAX_TABLES: Record<string, number> = {
+  basic: 5,
+  pro: 10,
+  enterprise: 25,
+};
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -24,12 +29,47 @@ export default function AdminDashboardPage() {
   const [editingTableName, setEditingTableName] = useState<string>('');
   const [deleteConfirmTableId, setDeleteConfirmTableId] = useState<string | null>(null);
 
+  // Quota & Plan Enforcement States
+  const [tenantInfo, setTenantInfo] = useState<{ subscriptionPlan: string; maxTables: number } | null>(null);
+  const [isQuotaExceededModalOpen, setIsQuotaExceededModalOpen] = useState(false);
+
+  // Fetch Tenant Info from DB API to know current quota limit
+  useEffect(() => {
+    const fetchCurrentTenant = async () => {
+      try {
+        const res = await fetch('/api/tenants');
+        const json = await res.json();
+        if (json.status === 'success' && Array.isArray(json.data)) {
+          const matched = json.data.find((t: any) => t.code.toUpperCase() === (tenantCode || 'TAB-SLOWBAR').toUpperCase());
+          if (matched) {
+            setTenantInfo({
+              subscriptionPlan: matched.subscriptionPlan,
+              maxTables: PLAN_MAX_TABLES[matched.subscriptionPlan] || matched.maxTables || 10,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch tenant info:', err);
+      }
+    };
+    fetchCurrentTenant();
+  }, [tenantCode]);
+
+  const maxTablesLimit = tenantInfo?.maxTables || PLAN_MAX_TABLES[tenantInfo?.subscriptionPlan || 'pro'] || 10;
+  const currentTableCount = masterTables.length;
+
   const handleGenerateNewPin = (tableId: string) => {
     const newPin = Math.floor(1000 + Math.random() * 9000).toString();
     updateTablePin(tableId, newPin);
   };
 
   const handleAddNewTable = () => {
+    // Check Table Quota Limit
+    if (currentTableCount >= maxTablesLimit) {
+      setIsQuotaExceededModalOpen(true);
+      return;
+    }
+
     addMasterTable();
   };
 
@@ -62,11 +102,15 @@ export default function AdminDashboardPage() {
         <div>
           <h1 className="text-xl font-extrabold text-white flex items-center gap-2 font-display">
             <LayoutDashboard className="w-6 h-6 text-emerald-400" />
-            Dashboard Pengelola Cafe / Warkop
+            Dashboard Pengelola Cafe / Warkop ({tenantCode})
           </h1>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            Kelola Sesi Meja Wasit, PIN Akses Panitia, Edit & Hapus Meja ({tenantCode})
-          </p>
+          <div className="flex items-center gap-3 mt-1 font-mono text-xs text-slate-400">
+            <span>Kelola Sesi Meja Wasit & PIN Akses Panitia</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-emerald-400 font-bold">
+              Paket: {(tenantInfo?.subscriptionPlan || 'pro').toUpperCase()} (Kuota: {currentTableCount}/{maxTablesLimit} Meja)
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -79,9 +123,13 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={handleAddNewTable}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-lg transition-all active:scale-95 ${
+              currentTableCount >= maxTablesLimit
+                ? 'bg-amber-600/80 hover:bg-amber-600 text-slate-950 shadow-amber-600/20'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-emerald-600/20'
+            }`}
           >
-            <Plus className="w-4 h-4" /> TAMBAH MEJA BARU
+            <Plus className="w-4 h-4" /> TAMBAH MEJA BARU ({currentTableCount}/{maxTablesLimit})
           </button>
 
           <Link
@@ -92,7 +140,6 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
       </div>
-
 
       {/* Table Master Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -233,6 +280,44 @@ export default function AdminDashboardPage() {
           );
         })}
       </div>
+
+      {/* Quota Exceeded Notification Modal */}
+      {isQuotaExceededModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/60 rounded-3xl p-6 md:p-8 max-w-md w-full text-center space-y-5 shadow-2xl animate-in zoom-in-95 duration-200 font-sans">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto text-3xl shadow-inner">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+
+            <div>
+              <h3 className="text-xl font-extrabold text-white">Batas Kuota Meja Tercapai!</h3>
+              <p className="text-xs text-slate-300 font-mono leading-relaxed mt-2">
+                Paket Billing Anda (<strong className="text-amber-400 uppercase">{tenantInfo?.subscriptionPlan || 'basic'}</strong>) membatasi maksimal <strong className="text-white">{maxTablesLimit} Meja Pertandingan</strong>.
+              </p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-left font-mono text-xs space-y-2">
+              <span className="text-[10px] text-slate-400 uppercase font-bold block">💡 CARA MENAMBAH MEJA:</span>
+              <p className="text-slate-300 text-[11px] leading-normal">
+                Untuk membuka kuota meja tambahan, silakan hubungi <strong>Super Admin SIREDOM</strong> untuk mengupgrade Paket Billing tenant Anda ke:
+              </p>
+              <ul className="text-[11px] text-cyan-300 space-y-1 pt-1 font-bold">
+                <li>• Paket Pro: Kuota 10 Meja</li>
+                <li>• Paket Enterprise: Kuota 25 Meja</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setIsQuotaExceededModalOpen(false)}
+                className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all"
+              >
+                SAYA MENGERTI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Table Confirmation Modal */}
       {deleteConfirmTableId && (

@@ -777,8 +777,15 @@ export const useScorerStore = create<ScorerStore>()(
       },
     }),
     {
-      name: 'siredom-scorer-storage',
+      name: 'siredom-auth-storage',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        userRole: state.userRole,
+        tenantCode: state.tenantCode,
+        tableNumber: state.tableNumber,
+      }),
     }
   )
 );
+

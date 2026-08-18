@@ -1,12 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { TenantMaster } from '@/types/domino';
-import { Building2, Plus, CreditCard, Pencil, Trash2, Key, Copy, Check, X, Shield, Lock, Mail } from 'lucide-react';
+import { Building2, Plus, CreditCard, Pencil, Trash2, Key, Copy, Check, X, Shield, Mail, RefreshCw } from 'lucide-react';
+
+const PLAN_MAX_TABLES: Record<string, number> = {
+  basic: 5,
+  pro: 10,
+  enterprise: 25,
+};
 
 export default function SuperAdminTenantsPage() {
-  const { tenants, masterTables, addTenant, updateTenant, deleteTenant, toggleTenantStatus } = useScorerStore();
+  const { masterTables } = useScorerStore();
+
+  const [tenantsList, setTenantsList] = useState<TenantMaster[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantMaster | null>(null);
@@ -18,7 +27,6 @@ export default function SuperAdminTenantsPage() {
   const [newTenantName, setNewTenantName] = useState('');
   const [newTenantCode, setNewTenantCode] = useState('');
   const [newPlan, setNewPlan] = useState<'basic' | 'pro' | 'enterprise'>('pro');
-  const [newMaxTables, setNewMaxTables] = useState<number>(10);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('password123');
 
@@ -26,62 +34,144 @@ export default function SuperAdminTenantsPage() {
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
   const [editPlan, setEditPlan] = useState<'basic' | 'pro' | 'enterprise'>('pro');
-  const [editMaxTables, setEditMaxTables] = useState<number>(10);
   const [editAdminEmail, setEditAdminEmail] = useState('');
   const [editAdminPassword, setEditAdminPassword] = useState('password123');
+
+  // Fetch tenants directly from Supabase PostgreSQL API
+  const fetchTenants = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/tenants');
+      const json = await res.json();
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        setTenantsList(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch tenants from API:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
 
   const handleOpenEdit = (t: TenantMaster) => {
     setEditingTenant(t);
     setEditName(t.name);
     setEditCode(t.code);
-    setEditPlan(t.subscriptionPlan);
-    setEditMaxTables(t.maxTables);
+    setEditPlan(t.subscriptionPlan as any);
     setEditAdminEmail(t.adminEmail || `admin@${t.code.toLowerCase()}.com`);
     setEditAdminPassword(t.adminPassword || 'password123');
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTenantName || !newTenantCode) return;
 
     const formattedCode = newTenantCode.trim().toUpperCase();
+    const maxTables = PLAN_MAX_TABLES[newPlan] || 10;
+    const adminEmail = newAdminEmail.trim() || `admin@${formattedCode.toLowerCase()}.com`;
 
-    addTenant({
-      name: newTenantName.trim(),
-      code: formattedCode,
-      subscriptionPlan: newPlan,
-      status: 'active',
-      maxTables: newMaxTables,
-      adminEmail: newAdminEmail.trim() || `admin@${formattedCode.toLowerCase()}.com`,
-      adminPassword: newAdminPassword.trim() || 'password123',
-    });
+    try {
+      const res = await fetch('/api/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTenantName.trim(),
+          code: formattedCode,
+          subscriptionPlan: newPlan,
+          maxTables,
+          adminEmail,
+          adminPassword: newAdminPassword.trim() || 'password123',
+        }),
+      });
 
-    setNewTenantName('');
-    setNewTenantCode('');
-    setNewAdminEmail('');
-    setNewAdminPassword('password123');
-    setIsCreateModalOpen(false);
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTenants();
+        setNewTenantName('');
+        setNewTenantCode('');
+        setNewAdminEmail('');
+        setNewAdminPassword('password123');
+        setIsCreateModalOpen(false);
+      } else {
+        alert(`Gagal membuat tenant: ${json.message}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi kesalahan: ${err.message}`);
+    }
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTenant || !editName || !editCode) return;
 
-    updateTenant(editingTenant.id, {
-      name: editName.trim(),
-      code: editCode.trim().toUpperCase(),
-      subscriptionPlan: editPlan,
-      maxTables: editMaxTables,
-      adminEmail: editAdminEmail.trim(),
-      adminPassword: editAdminPassword.trim(),
-    });
+    const maxTables = PLAN_MAX_TABLES[editPlan] || 10;
 
-    setEditingTenant(null);
+    try {
+      const res = await fetch('/api/tenants', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingTenant.id,
+          name: editName.trim(),
+          code: editCode.trim().toUpperCase(),
+          subscriptionPlan: editPlan,
+          maxTables,
+          adminEmail: editAdminEmail.trim(),
+          adminPassword: editAdminPassword.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTenants();
+        setEditingTenant(null);
+      } else {
+        alert(`Gagal mengupdate tenant: ${json.message}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi kesalahan: ${err.message}`);
+    }
   };
 
-  const handleDeleteConfirm = (tenantId: string) => {
-    deleteTenant(tenantId);
-    setDeleteConfirmId(null);
+  const handleDeleteConfirm = async (tenantId: string) => {
+    try {
+      const res = await fetch(`/api/tenants?id=${tenantId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTenants();
+        setDeleteConfirmId(null);
+      } else {
+        alert(`Gagal menghapus tenant: ${json.message}`);
+      }
+    } catch (err: any) {
+      alert(`Terjadi kesalahan: ${err.message}`);
+    }
+  };
+
+  const handleToggleStatus = async (t: TenantMaster) => {
+    const nextStatus = t.status === 'active' ? 'suspended' : 'active';
+    try {
+      const res = await fetch('/api/tenants', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: t.id,
+          status: nextStatus,
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        await fetchTenants();
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle status:', err);
+    }
   };
 
   const handleCopyCredentials = (t: TenantMaster) => {
@@ -96,7 +186,7 @@ Paket Billing: ${t.subscriptionPlan.toUpperCase()}
 
 [AKUN CAFE ADMIN]
 Email: ${t.adminEmail}
-Password: ${t.adminPassword}
+Password: ${t.adminPassword || 'password123'}
 
 [AKUN WASIT MEJA]
 Kode Tenant: ${t.code}
@@ -119,16 +209,26 @@ URL Login Portal: http://localhost:3000/login
             Manajemen Tenant Warkop & Kredensial Admin (Super Admin)
           </h1>
           <p className="text-xs text-slate-400 font-mono mt-1">
-            Buat Akun Admin Cafe, Atur Email/Password, Salin Kredensial, & Kelola Suspension SaaS
+            Data Terhubung Langsung ke Cloud Database Supabase PostgreSQL
           </p>
         </div>
 
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/25 transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" /> REGISTRASI TENANT & AKUN ADMIN BARU
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchTenants}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            title="Refresh Data dari Database"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/25 transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" /> REGISTRASI TENANT & AKUN ADMIN BARU
+          </button>
+        </div>
       </div>
 
       {/* Tenants Table */}
@@ -147,81 +247,95 @@ URL Login Portal: http://localhost:3000/login
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {tenants.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="p-4 font-extrabold text-white">{t.name}</td>
-                  <td className="p-4 font-bold text-cyan-400">{t.code}</td>
-                  <td className="p-4 font-bold text-slate-300 flex items-center gap-1.5 pt-4">
-                    <Mail className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{t.adminEmail || `admin@${t.code.toLowerCase()}.com`}</span>
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border uppercase text-[10px] font-bold ${
-                        t.subscriptionPlan === 'enterprise'
-                          ? 'bg-purple-950 text-purple-300 border-purple-800'
-                          : t.subscriptionPlan === 'pro'
-                          ? 'bg-blue-950 text-blue-300 border-blue-800'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      <CreditCard className="w-3 h-3" /> {t.subscriptionPlan}
-                    </span>
-                  </td>
-                  <td className="p-4 font-bold text-slate-300">{t.maxTables} Meja</td>
-                  <td className="p-4">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                        t.status === 'active'
-                          ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                          : 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse'
-                      }`}
-                    >
-                      {t.status === 'active' ? '● AKTIF' : '⛔ SUSPENDED'}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right flex items-center justify-end gap-2">
-                    {/* View/Copy Credential Button */}
-                    <button
-                      onClick={() => setViewCredentialTenant(t)}
-                      className="px-2.5 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-300 text-xs font-extrabold flex items-center gap-1 transition-colors"
-                      title="Lihat & Salin Kredensial Login Admin"
-                    >
-                      <Key className="w-3.5 h-3.5" /> Kredensial
-                    </button>
-
-                    {/* Edit Tenant Button */}
-                    <button
-                      onClick={() => handleOpenEdit(t)}
-                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 transition-colors"
-                      title="Edit Data Tenant"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Delete Tenant Button */}
-                    <button
-                      onClick={() => setDeleteConfirmId(t.id)}
-                      className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
-                      title="Hapus Tenant"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Suspend / Activate Toggle Button */}
-                    <button
-                      onClick={() => toggleTenantStatus(t.id)}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-                        t.status === 'active'
-                          ? 'bg-rose-950 hover:bg-rose-900 border-rose-800 text-rose-300'
-                          : 'bg-emerald-950 hover:bg-emerald-900 border-emerald-800 text-emerald-300'
-                      }`}
-                    >
-                      {t.status === 'active' ? 'Suspend' : 'Aktifkan'}
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 font-bold">
+                    Memuat data tenant dari Supabase Database...
                   </td>
                 </tr>
-              ))}
+              ) : tenantsList.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 font-bold">
+                    Belum ada data tenant tersimpan di database.
+                  </td>
+                </tr>
+              ) : (
+                tenantsList.map((t) => (
+                  <tr key={t.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="p-4 font-extrabold text-white">{t.name}</td>
+                    <td className="p-4 font-bold text-cyan-400">{t.code}</td>
+                    <td className="p-4 font-bold text-slate-300 flex items-center gap-1.5 pt-4">
+                      <Mail className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{t.adminEmail || `admin@${t.code.toLowerCase()}.com`}</span>
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border uppercase text-[10px] font-bold ${
+                          t.subscriptionPlan === 'enterprise'
+                            ? 'bg-purple-950 text-purple-300 border-purple-800'
+                            : t.subscriptionPlan === 'pro'
+                            ? 'bg-blue-950 text-blue-300 border-blue-800'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        <CreditCard className="w-3 h-3" /> {t.subscriptionPlan}
+                      </span>
+                    </td>
+                    <td className="p-4 font-bold text-slate-300">{PLAN_MAX_TABLES[t.subscriptionPlan] || t.maxTables} Meja</td>
+                    <td className="p-4">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                          t.status === 'active'
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                            : 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse'
+                        }`}
+                      >
+                        {t.status === 'active' ? '● AKTIF' : '⛔ SUSPENDED'}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right flex items-center justify-end gap-2">
+                      {/* View/Copy Credential Button */}
+                      <button
+                        onClick={() => setViewCredentialTenant(t)}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-300 text-xs font-extrabold flex items-center gap-1 transition-colors"
+                        title="Lihat & Salin Kredensial Login Admin"
+                      >
+                        <Key className="w-3.5 h-3.5" /> Kredensial
+                      </button>
+
+                      {/* Edit Tenant Button */}
+                      <button
+                        onClick={() => handleOpenEdit(t)}
+                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 transition-colors"
+                        title="Edit Data Tenant"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete Tenant Button */}
+                      <button
+                        onClick={() => setDeleteConfirmId(t.id)}
+                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                        title="Hapus Tenant"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Suspend / Activate Toggle Button */}
+                      <button
+                        onClick={() => handleToggleStatus(t)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                          t.status === 'active'
+                            ? 'bg-rose-950 hover:bg-rose-900 border-rose-800 text-rose-300'
+                            : 'bg-emerald-950 hover:bg-emerald-900 border-emerald-800 text-emerald-300'
+                        }`}
+                      >
+                        {t.status === 'active' ? 'Suspend' : 'Aktifkan'}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -279,7 +393,7 @@ URL Login Portal: http://localhost:3000/login
                     value={newAdminEmail}
                     onChange={(e) => setNewAdminEmail(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none focus:border-rose-500"
-                    placeholder="admin@slowbar.com"
+                    placeholder="admin@tabslowbar.com"
                     required
                   />
                 </div>
@@ -297,31 +411,20 @@ URL Login Portal: http://localhost:3000/login
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">PAKET BILLING</label>
-                  <select
-                    value={newPlan}
-                    onChange={(e) => setNewPlan(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-rose-500"
-                  >
-                    <option value="basic">Basic (5 Meja)</option>
-                    <option value="pro">Pro (10 Meja)</option>
-                    <option value="enterprise">Enterprise (25 Meja)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">KUOTA MEJA</label>
-                  <input
-                    type="number"
-                    value={newMaxTables}
-                    onChange={(e) => setNewMaxTables(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-rose-500"
-                    min={1}
-                    max={50}
-                  />
-                </div>
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">PAKET BILLING (OTOMATIS KUOTA MEJA)</label>
+                <select
+                  value={newPlan}
+                  onChange={(e) => setNewPlan(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-rose-500"
+                >
+                  <option value="basic">Basic (Maksimal 5 Meja)</option>
+                  <option value="pro">Pro (Maksimal 10 Meja)</option>
+                  <option value="enterprise">Enterprise (Maksimal 25 Meja)</option>
+                </select>
+                <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
+                  ✓ Kuota Otomatis: {PLAN_MAX_TABLES[newPlan]} Meja Pertandingan
+                </span>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -410,31 +513,20 @@ URL Login Portal: http://localhost:3000/login
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">PAKET BILLING</label>
-                  <select
-                    value={editPlan}
-                    onChange={(e) => setEditPlan(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="basic">Basic (5 Meja)</option>
-                    <option value="pro">Pro (10 Meja)</option>
-                    <option value="enterprise">Enterprise (25 Meja)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">KUOTA MEJA</label>
-                  <input
-                    type="number"
-                    value={editMaxTables}
-                    onChange={(e) => setEditMaxTables(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-500"
-                    min={1}
-                    max={50}
-                  />
-                </div>
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">PAKET BILLING (OTOMATIS KUOTA MEJA)</label>
+                <select
+                  value={editPlan}
+                  onChange={(e) => setEditPlan(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="basic">Basic (Maksimal 5 Meja)</option>
+                  <option value="pro">Pro (Maksimal 10 Meja)</option>
+                  <option value="enterprise">Enterprise (Maksimal 25 Meja)</option>
+                </select>
+                <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
+                  ✓ Kuota Otomatis: {PLAN_MAX_TABLES[editPlan]} Meja Pertandingan
+                </span>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -481,7 +573,7 @@ URL Login Portal: http://localhost:3000/login
                 <span className="text-[10px] text-amber-400 uppercase block font-bold mb-1">🔑 LOGIN AKUN CAFE ADMIN:</span>
                 <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 space-y-1">
                   <div>Email: <strong className="text-cyan-300">{viewCredentialTenant.adminEmail}</strong></div>
-                  <div>Password: <strong className="text-emerald-400">{viewCredentialTenant.adminPassword}</strong></div>
+                  <div>Password: <strong className="text-emerald-400">{viewCredentialTenant.adminPassword || 'password123'}</strong></div>
                 </div>
               </div>
 
@@ -522,7 +614,7 @@ URL Login Portal: http://localhost:3000/login
             </div>
             <h3 className="text-xl font-extrabold text-white">Hapus Tenant Ini?</h3>
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
-              Tenant ini akan dihapus secara permanen dari sistem SaaS SIREDOM.
+              Tenant ini akan dihapus secara permanen dari basis data Supabase PostgreSQL.
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
