@@ -1,9 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useScorerStore } from '@/store/useScorerStore';
-import { TenantMaster } from '@/types/domino';
-import { Building2, Plus, CreditCard, Pencil, Trash2, Key, Copy, Check, X, Shield, Mail, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useTransition } from 'react';
+import { Building2, Plus, Search, ShieldAlert, CheckCircle2, RefreshCw, KeyRound, Pencil, Trash2, X, AlertTriangle } from 'lucide-react';
+import {
+  getTenantsAction,
+  createTenantAction,
+  updateTenantAction,
+  deleteTenantAction,
+} from '@/app/actions/tenantActions';
+
+interface TenantItem {
+  id: string;
+  name: string;
+  code: string;
+  subscriptionPlan: string;
+  status: 'active' | 'suspended';
+  maxTables: number;
+  activeMatches: number;
+  adminEmail: string;
+  createdAt: string;
+}
 
 const PLAN_MAX_TABLES: Record<string, number> = {
   basic: 5,
@@ -12,42 +28,36 @@ const PLAN_MAX_TABLES: Record<string, number> = {
 };
 
 export default function SuperAdminTenantsPage() {
-  const { masterTables } = useScorerStore();
-
-  const [tenantsList, setTenantsList] = useState<TenantMaster[]>([]);
+  const [tenants, setTenants] = useState<TenantItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
 
+  // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingTenant, setEditingTenant] = useState<TenantMaster | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [viewCredentialTenant, setViewCredentialTenant] = useState<TenantMaster | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<TenantItem | null>(null);
+  const [deleteConfirmTenant, setDeleteConfirmTenant] = useState<TenantItem | null>(null);
 
-  // Form states for Create
-  const [newTenantName, setNewTenantName] = useState('');
-  const [newTenantCode, setNewTenantCode] = useState('');
-  const [newPlan, setNewPlan] = useState<'basic' | 'pro' | 'enterprise'>('pro');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('password123');
+  // Form States
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    subscriptionPlan: 'pro',
+    adminEmail: '',
+    adminPassword: '',
+  });
 
-  // Form states for Edit
-  const [editName, setEditName] = useState('');
-  const [editCode, setEditCode] = useState('');
-  const [editPlan, setEditPlan] = useState<'basic' | 'pro' | 'enterprise'>('pro');
-  const [editAdminEmail, setEditAdminEmail] = useState('');
-  const [editAdminPassword, setEditAdminPassword] = useState('password123');
+  const [formError, setFormError] = useState('');
 
-  // Fetch tenants directly from Supabase PostgreSQL API
   const fetchTenants = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/tenants');
-      const json = await res.json();
-      if (json.status === 'success' && Array.isArray(json.data)) {
-        setTenantsList(json.data);
+      const res = await getTenantsAction();
+      if (res.success) {
+        setTenants(res.data || []);
       }
     } catch (err) {
-      console.error('Failed to fetch tenants from API:', err);
+      console.error('Failed to fetch tenants:', err);
     } finally {
       setIsLoading(false);
     }
@@ -57,389 +67,370 @@ export default function SuperAdminTenantsPage() {
     fetchTenants();
   }, []);
 
-  const handleOpenEdit = (t: TenantMaster) => {
-    setEditingTenant(t);
-    setEditName(t.name);
-    setEditCode(t.code);
-    setEditPlan(t.subscriptionPlan as any);
-    setEditAdminEmail(t.adminEmail || `admin@${t.code.toLowerCase()}.com`);
-    setEditAdminPassword(t.adminPassword || 'password123');
+  const handleOpenCreateModal = () => {
+    setFormData({
+      name: '',
+      code: '',
+      subscriptionPlan: 'pro',
+      adminEmail: '',
+      adminPassword: '',
+    });
+    setFormError('');
+    setIsCreateModalOpen(true);
   };
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleOpenEditModal = (tenant: TenantItem) => {
+    setEditingTenant(tenant);
+    setFormData({
+      name: tenant.name,
+      code: tenant.code,
+      subscriptionPlan: tenant.subscriptionPlan,
+      adminEmail: tenant.adminEmail,
+      adminPassword: '',
+    });
+    setFormError('');
+  };
+
+  const handleCreateTenantSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTenantName || !newTenantCode) return;
+    setFormError('');
 
-    const formattedCode = newTenantCode.trim().toUpperCase();
-    const maxTables = PLAN_MAX_TABLES[newPlan] || 10;
-    const adminEmail = newAdminEmail.trim() || `admin@${formattedCode.toLowerCase()}.com`;
+    if (!formData.name || !formData.code || !formData.adminEmail || !formData.adminPassword) {
+      setFormError('Nama Tenant, Kode Tenant, Email Admin, dan Password wajib diisi');
+      return;
+    }
 
-    try {
-      const res = await fetch('/api/tenants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newTenantName.trim(),
-          code: formattedCode,
-          subscriptionPlan: newPlan,
-          maxTables,
-          adminEmail,
-          adminPassword: newAdminPassword.trim() || 'password123',
-        }),
+    startTransition(async () => {
+      const res = await createTenantAction({
+        name: formData.name,
+        code: formData.code,
+        adminEmail: formData.adminEmail,
+        adminPassword: formData.adminPassword,
+        subscriptionPlan: formData.subscriptionPlan,
+        maxTables: PLAN_MAX_TABLES[formData.subscriptionPlan] || 10,
       });
 
-      const json = await res.json();
-      if (json.status === 'success') {
+      if (res.success) {
         await fetchTenants();
-        setNewTenantName('');
-        setNewTenantCode('');
-        setNewAdminEmail('');
-        setNewAdminPassword('password123');
         setIsCreateModalOpen(false);
       } else {
-        alert(`Gagal membuat tenant: ${json.message}`);
+        setFormError(res.error || 'Gagal membuat tenant baru');
       }
-    } catch (err: any) {
-      alert(`Terjadi kesalahan: ${err.message}`);
-    }
+    });
   };
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
+  const handleUpdateTenantSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTenant || !editName || !editCode) return;
+    if (!editingTenant) return;
+    setFormError('');
 
-    const maxTables = PLAN_MAX_TABLES[editPlan] || 10;
-
-    try {
-      const res = await fetch('/api/tenants', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingTenant.id,
-          name: editName.trim(),
-          code: editCode.trim().toUpperCase(),
-          subscriptionPlan: editPlan,
-          maxTables,
-          adminEmail: editAdminEmail.trim(),
-          adminPassword: editAdminPassword.trim(),
-        }),
+    startTransition(async () => {
+      const res = await updateTenantAction({
+        id: editingTenant.id,
+        name: formData.name,
+        subscriptionPlan: formData.subscriptionPlan,
+        adminEmail: formData.adminEmail,
+        maxTables: PLAN_MAX_TABLES[formData.subscriptionPlan] || 10,
       });
 
-      const json = await res.json();
-      if (json.status === 'success') {
+      if (res.success) {
         await fetchTenants();
         setEditingTenant(null);
       } else {
-        alert(`Gagal mengupdate tenant: ${json.message}`);
+        setFormError(res.error || 'Gagal mengupdate tenant');
       }
-    } catch (err: any) {
-      alert(`Terjadi kesalahan: ${err.message}`);
-    }
+    });
   };
 
-  const handleDeleteConfirm = async (tenantId: string) => {
-    try {
-      const res = await fetch(`/api/tenants?id=${tenantId}`, {
-        method: 'DELETE',
+  const handleToggleTenantStatus = (tenant: TenantItem) => {
+    const newStatus = tenant.status === 'active' ? 'suspended' : 'active';
+    startTransition(async () => {
+      const res = await updateTenantAction({
+        id: tenant.id,
+        status: newStatus,
       });
-      const json = await res.json();
-      if (json.status === 'success') {
+      if (res.success) {
         await fetchTenants();
-        setDeleteConfirmId(null);
+      }
+    });
+  };
+
+  const handleDeleteTenantConfirm = (tenant: TenantItem) => {
+    startTransition(async () => {
+      const res = await deleteTenantAction(tenant.id);
+      if (res.success) {
+        await fetchTenants();
+        setDeleteConfirmTenant(null);
       } else {
-        alert(`Gagal menghapus tenant: ${json.message}`);
+        alert(res.error || 'Gagal menghapus tenant');
       }
-    } catch (err: any) {
-      alert(`Terjadi kesalahan: ${err.message}`);
-    }
+    });
   };
 
-  const handleToggleStatus = async (t: TenantMaster) => {
-    const nextStatus = t.status === 'active' ? 'suspended' : 'active';
-    try {
-      const res = await fetch('/api/tenants', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: t.id,
-          status: nextStatus,
-        }),
-      });
-      const json = await res.json();
-      if (json.status === 'success') {
-        await fetchTenants();
-      }
-    } catch (err: any) {
-      console.error('Failed to toggle status:', err);
-    }
-  };
-
-  const handleCopyCredentials = (t: TenantMaster) => {
-    const defaultPin = masterTables[0]?.pinCode || '1234';
-    const textToCopy = `====================================
-SIREDOM PORTAL LOGIN KREDENSIAL
-====================================
-Mitra Tenant: ${t.name}
-Kode Tenant: ${t.code}
-Status Akun: ${t.status.toUpperCase()}
-Paket Billing: ${t.subscriptionPlan.toUpperCase()}
-
-[AKUN CAFE ADMIN]
-Email: ${t.adminEmail}
-Password: ${t.adminPassword || 'password123'}
-
-[AKUN WASIT MEJA]
-Kode Tenant: ${t.code}
-PIN Meja Utama: ${defaultPin}
-URL Login Portal: http://localhost:3000/login
-====================================`;
-
-    navigator.clipboard.writeText(textToCopy);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2500);
-  };
+  const filteredTenants = tenants.filter(
+    (t) =>
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.adminEmail.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 font-sans">
-      {/* Top Welcome Banner */}
+      {/* Top Banner */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-white flex items-center gap-2 font-display">
             <Building2 className="w-6 h-6 text-rose-400" />
-            Manajemen Tenant Warkop & Kredensial Admin (Super Admin)
+            Superadmin SaaS Tenant Management
           </h1>
           <p className="text-xs text-slate-400 font-mono mt-1">
-            Data Terhubung Langsung ke Cloud Database Supabase PostgreSQL
+            Kelola Mitra Cafe / Warkop, Akun Admin (Bcrypt Hashed), & Limit Kuota Paket Billing
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={fetchTenants}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            title="Refresh Data dari Database"
+            disabled={isLoading || isPending}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-50"
+            title="Refresh Tenant dari Database"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading || isPending ? 'animate-spin' : ''}`} />
           </button>
 
           <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/25 transition-all active:scale-95"
+            onClick={handleOpenCreateModal}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/20 transition-all active:scale-95"
           >
-            <Plus className="w-4 h-4" /> REGISTRASI TENANT & AKUN ADMIN BARU
+            <Plus className="w-4 h-4" /> REGISTRASI TENANT BARU
           </button>
         </div>
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center gap-3">
+        <Search className="w-5 h-5 text-slate-500" />
+        <input
+          type="text"
+          placeholder="Cari berdasarkan Nama Cafe, Kode Tenant, atau Email Admin..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="bg-transparent border-none text-white text-sm focus:outline-none w-full font-mono placeholder:text-slate-600"
+        />
+      </div>
+
       {/* Tenants Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden font-mono">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs font-mono">
-            <thead>
-              <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
-                <th className="p-4">Nama Tenant Warkop</th>
-                <th className="p-4">Kode Tenant</th>
-                <th className="p-4">Akun Email Admin</th>
-                <th className="p-4">Paket Billing</th>
-                <th className="p-4">Kuota Meja</th>
-                <th className="p-4">Status Akun</th>
-                <th className="p-4 text-right">Aksi Governance & Kredensial</th>
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
+              <tr>
+                <th className="px-6 py-4">MITRA CAFE / WARKOP</th>
+                <th className="px-6 py-4">KODE TENANT</th>
+                <th className="px-6 py-4">EMAIL ADMIN (BCRYPT)</th>
+                <th className="px-6 py-4">PAKET BILLING</th>
+                <th className="px-6 py-4">STATUS</th>
+                <th className="px-6 py-4 text-right">AKSI</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500 font-bold">
-                    Memuat data tenant dari Supabase Database...
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500 font-bold">
+                    Memuat data tenant dari Supabase PostgreSQL via Server Action...
                   </td>
                 </tr>
-              ) : tenantsList.length === 0 ? (
+              ) : filteredTenants.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500 font-bold">
-                    Belum ada data tenant tersimpan di database.
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500 font-bold">
+                    Tidak ada data tenant ditemukan.
                   </td>
                 </tr>
               ) : (
-                tenantsList.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="p-4 font-extrabold text-white">{t.name}</td>
-                    <td className="p-4 font-bold text-cyan-400">{t.code}</td>
-                    <td className="p-4 font-bold text-slate-300 flex items-center gap-1.5 pt-4">
-                      <Mail className="w-3.5 h-3.5 text-slate-500" />
-                      <span>{t.adminEmail || `admin@${t.code.toLowerCase()}.com`}</span>
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border uppercase text-[10px] font-bold ${
-                          t.subscriptionPlan === 'enterprise'
-                            ? 'bg-purple-950 text-purple-300 border-purple-800'
-                            : t.subscriptionPlan === 'pro'
-                            ? 'bg-blue-950 text-blue-300 border-blue-800'
-                            : 'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}
-                      >
-                        <CreditCard className="w-3 h-3" /> {t.subscriptionPlan}
-                      </span>
-                    </td>
-                    <td className="p-4 font-bold text-slate-300">{PLAN_MAX_TABLES[t.subscriptionPlan] || t.maxTables} Meja</td>
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                          t.status === 'active'
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                            : 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse'
-                        }`}
-                      >
-                        {t.status === 'active' ? '● AKTIF' : '⛔ SUSPENDED'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right flex items-center justify-end gap-2">
-                      {/* View/Copy Credential Button */}
-                      <button
-                        onClick={() => setViewCredentialTenant(t)}
-                        className="px-2.5 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-300 text-xs font-extrabold flex items-center gap-1 transition-colors"
-                        title="Lihat & Salin Kredensial Login Admin"
-                      >
-                        <Key className="w-3.5 h-3.5" /> Kredensial
-                      </button>
+                filteredTenants.map((t) => {
+                  const maxQuota = PLAN_MAX_TABLES[t.subscriptionPlan] || t.maxTables;
 
-                      {/* Edit Tenant Button */}
-                      <button
-                        onClick={() => handleOpenEdit(t)}
-                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800 transition-colors"
-                        title="Edit Data Tenant"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Delete Tenant Button */}
-                      <button
-                        onClick={() => setDeleteConfirmId(t.id)}
-                        className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
-                        title="Hapus Tenant"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Suspend / Activate Toggle Button */}
-                      <button
-                        onClick={() => handleToggleStatus(t)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-                          t.status === 'active'
-                            ? 'bg-rose-950 hover:bg-rose-900 border-rose-800 text-rose-300'
-                            : 'bg-emerald-950 hover:bg-emerald-900 border-emerald-800 text-emerald-300'
-                        }`}
-                      >
-                        {t.status === 'active' ? 'Suspend' : 'Aktifkan'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-6 py-4 font-bold text-white flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-rose-400" />
+                        {t.name}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-cyan-400">{t.code}</td>
+                      <td className="px-6 py-4 text-slate-300">{t.adminEmail}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-950 text-amber-400 font-extrabold uppercase border border-slate-800">
+                          {t.subscriptionPlan} ({maxQuota} Meja)
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                            t.status === 'active'
+                              ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                              : 'bg-rose-950 text-rose-400 border-rose-800'
+                          }`}
+                        >
+                          {t.status === 'active' ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> AKTIF
+                            </>
+                          ) : (
+                            <>
+                              <ShieldAlert className="w-3 h-3 text-rose-400" /> SUSPENDED
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button
+                          onClick={() => handleToggleTenantStatus(t)}
+                          disabled={isPending}
+                          className={`px-3 py-1.5 rounded-xl font-extrabold text-[10px] transition-all border ${
+                            t.status === 'active'
+                              ? 'bg-amber-950 hover:bg-amber-900 text-amber-400 border-amber-800'
+                              : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border-emerald-800'
+                          }`}
+                        >
+                          {t.status === 'active' ? 'SUSPEND' : 'AKTIFKAN'}
+                        </button>
+                        <button
+                          onClick={() => handleOpenEditModal(t)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+                          title="Edit Tenant"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmTenant(t)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 border border-slate-700 transition-colors"
+                          title="Hapus Tenant"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Register New Tenant & Admin Account Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 font-display">
+      {/* Create / Edit Tenant Modal */}
+      {(isCreateModalOpen || editingTenant) && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-lg w-full space-y-5 shadow-2xl animate-in zoom-in-95 duration-200 font-sans">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-rose-400" />
-                Registrasi Tenant & Akun Admin Baru
+                {editingTenant ? 'Edit Data Tenant' : 'Registrasi Tenant Cafe Baru'}
               </h3>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setEditingTenant(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4 font-mono text-xs">
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-mono">
+                ⚠️ {formError}
+              </div>
+            )}
+
+            <form
+              onSubmit={editingTenant ? handleUpdateTenantSubmit : handleCreateTenantSubmit}
+              className="space-y-4 font-mono text-xs"
+            >
               <div>
-                <label className="block text-slate-400 font-bold mb-1">NAMA WARKOP / CAFE</label>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">Nama Cafe / Warkop</label>
                 <input
                   type="text"
-                  value={newTenantName}
-                  onChange={(e) => setNewTenantName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-rose-500"
-                  placeholder="Tab Slowbar Coffee"
+                  placeholder="Misal: Tab Slowbar Coffee"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-rose-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">KODE TENANT UNIQUE</label>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">Kode Tenant (Unik)</label>
                 <input
                   type="text"
-                  value={newTenantCode}
-                  onChange={(e) => setNewTenantCode(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold uppercase focus:outline-none focus:border-rose-500"
-                  placeholder="TAB-SLOWBAR"
+                  placeholder="Misal: TAB-SLOWBAR"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  disabled={!!editingTenant}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-rose-500 uppercase disabled:opacity-50"
                   required
                 />
               </div>
 
-              {/* Admin Email & Password Configuration */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-3">
-                <span className="text-[10px] text-rose-400 uppercase font-bold block flex items-center gap-1">
-                  <Shield className="w-3 h-3" /> SETTING AKUN CAFE ADMIN:
-                </span>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">EMAIL ADMIN CAFE</label>
-                  <input
-                    type="email"
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none focus:border-rose-500"
-                    placeholder="admin@tabslowbar.com"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">PASSWORD ADMIN CAFE</label>
-                  <input
-                    type="text"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-cyan-300 font-bold focus:outline-none focus:border-rose-500"
-                    placeholder="password123"
-                    required
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-slate-400 font-bold mb-1">PAKET BILLING (OTOMATIS KUOTA MEJA)</label>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">Paket Billing SaaS</label>
                 <select
-                  value={newPlan}
-                  onChange={(e) => setNewPlan(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-rose-500"
+                  value={formData.subscriptionPlan}
+                  onChange={(e) => setFormData({ ...formData, subscriptionPlan: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-rose-500"
                 >
-                  <option value="basic">Basic (Maksimal 5 Meja)</option>
-                  <option value="pro">Pro (Maksimal 10 Meja)</option>
-                  <option value="enterprise">Enterprise (Maksimal 25 Meja)</option>
+                  <option value="basic">Paket Basic (Kuota Max 5 Meja)</option>
+                  <option value="pro">Paket Pro (Kuota Max 10 Meja)</option>
+                  <option value="enterprise">Paket Enterprise (Kuota Max 25 Meja)</option>
                 </select>
-                <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
-                  ✓ Kuota Otomatis: {PLAN_MAX_TABLES[newPlan]} Meja Pertandingan
-                </span>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">Email Admin Cafe</label>
+                <input
+                  type="email"
+                  placeholder="admin@tabslowbar.com"
+                  value={formData.adminEmail}
+                  onChange={(e) => setFormData({ ...formData, adminEmail: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-rose-500"
+                  required
+                />
+              </div>
+
+              {!editingTenant && (
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1 uppercase">
+                    Password Admin (Di-encrypt Bcrypt)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Masukkan password admin..."
+                    value={formData.adminPassword}
+                    onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-rose-500"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setEditingTenant(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20"
+                  disabled={isPending}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold shadow-lg shadow-rose-600/30 disabled:opacity-50"
                 >
-                  Simpan Tenant & Akun Admin
+                  {isPending ? 'Menyimpan...' : editingTenant ? 'Simpan Perubahan' : 'Buat Tenant & Akun User'}
                 </button>
               </div>
             </form>
@@ -447,187 +438,30 @@ URL Login Portal: http://localhost:3000/login
         </div>
       )}
 
-      {/* Edit Tenant & Admin Account Modal */}
-      {editingTenant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2 font-display">
-                <Pencil className="w-5 h-5 text-cyan-400" />
-                Edit Tenant & Akun Admin: {editingTenant.name}
-              </h3>
-              <button onClick={() => setEditingTenant(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleEditSubmit} className="space-y-4 font-mono text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">NAMA WARKOP / CAFE</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">KODE TENANT UNIQUE</label>
-                <input
-                  type="text"
-                  value={editCode}
-                  onChange={(e) => setEditCode(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold uppercase focus:outline-none focus:border-cyan-500"
-                  required
-                />
-              </div>
-
-              {/* Admin Email & Password Configuration */}
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-3">
-                <span className="text-[10px] text-cyan-400 uppercase font-bold block flex items-center gap-1">
-                  <Shield className="w-3 h-3" /> SETTING AKUN CAFE ADMIN:
-                </span>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">EMAIL ADMIN CAFE</label>
-                  <input
-                    type="email"
-                    value={editAdminEmail}
-                    onChange={(e) => setEditAdminEmail(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-bold focus:outline-none focus:border-cyan-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">PASSWORD ADMIN CAFE</label>
-                  <input
-                    type="text"
-                    value={editAdminPassword}
-                    onChange={(e) => setEditAdminPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-cyan-300 font-bold focus:outline-none focus:border-cyan-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">PAKET BILLING (OTOMATIS KUOTA MEJA)</label>
-                <select
-                  value={editPlan}
-                  onChange={(e) => setEditPlan(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white font-bold focus:outline-none focus:border-cyan-500"
-                >
-                  <option value="basic">Basic (Maksimal 5 Meja)</option>
-                  <option value="pro">Pro (Maksimal 10 Meja)</option>
-                  <option value="enterprise">Enterprise (Maksimal 25 Meja)</option>
-                </select>
-                <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
-                  ✓ Kuota Otomatis: {PLAN_MAX_TABLES[editPlan]} Meja Pertandingan
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingTenant(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-600/20"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* View & Copy Credential Modal */}
-      {viewCredentialTenant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                <Key className="w-5 h-5 text-amber-400" />
-                Kredensial Akses Admin: {viewCredentialTenant.name}
-              </h3>
-              <button onClick={() => setViewCredentialTenant(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 font-mono text-xs space-y-3">
-              <div>
-                <span className="text-[10px] text-slate-500 uppercase block font-bold">NAMA TENANT / WARKOP</span>
-                <span className="text-sm font-extrabold text-white">{viewCredentialTenant.name} ({viewCredentialTenant.code})</span>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800/80">
-                <span className="text-[10px] text-amber-400 uppercase block font-bold mb-1">🔑 LOGIN AKUN CAFE ADMIN:</span>
-                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 space-y-1">
-                  <div>Email: <strong className="text-cyan-300">{viewCredentialTenant.adminEmail}</strong></div>
-                  <div>Password: <strong className="text-emerald-400">{viewCredentialTenant.adminPassword || 'password123'}</strong></div>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800/80">
-                <span className="text-[10px] text-blue-400 uppercase block font-bold mb-1">🎲 LOGIN WASIT MEJA:</span>
-                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 space-y-1">
-                  <div>Kode Tenant: <strong className="text-white">{viewCredentialTenant.code}</strong></div>
-                  <div>PIN Meja Utama: <strong className="text-cyan-300">{masterTables[0]?.pinCode || '1234'}</strong></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <button
-                onClick={() => setViewCredentialTenant(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
-              >
-                Tutup
-              </button>
-              <button
-                onClick={() => handleCopyCredentials(viewCredentialTenant)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all"
-              >
-                {isCopied ? <Check className="w-4 h-4 text-emerald-950" /> : <Copy className="w-4 h-4" />}
-                {isCopied ? 'TER-SALIN KREDENSIAL!' : 'SALIN TEKS KREDENSIAL'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl w-full max-w-md p-6 shadow-2xl text-center space-y-4 font-sans">
+      {/* Delete Tenant Modal */}
+      {deleteConfirmTenant && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-3xl p-6 md:p-8 max-w-md w-full text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 font-sans">
             <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto text-2xl shadow-inner">
               🗑️
             </div>
-            <h3 className="text-xl font-extrabold text-white">Hapus Tenant Ini?</h3>
+            <h3 className="text-xl font-extrabold text-white">Hapus Tenant {deleteConfirmTenant.name}?</h3>
             <p className="text-xs text-slate-300 font-mono leading-relaxed">
-              Tenant ini akan dihapus secara permanen dari basis data Supabase PostgreSQL.
+              Seluruh data meja master, akun admin, dan sesi pertandingan tenant ini akan dihapus secara permanen dari Supabase PostgreSQL.
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-all"
+                onClick={() => setDeleteConfirmTenant(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700"
               >
                 Batal
               </button>
               <button
-                onClick={() => handleDeleteConfirm(deleteConfirmId)}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all"
+                onClick={() => handleDeleteTenantConfirm(deleteConfirmTenant)}
+                disabled={isPending}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 disabled:opacity-50"
               >
-                Ya, Hapus Tenant
+                {isPending ? 'Hapus...' : 'Ya, Hapus Tenant'}
               </button>
             </div>
           </div>
