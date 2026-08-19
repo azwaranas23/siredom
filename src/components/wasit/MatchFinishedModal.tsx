@@ -86,7 +86,7 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
-          className="relative max-w-4xl w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden font-mono max-h-[92vh] scrollbar-none cursor-default"
+          className="relative max-w-4xl w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-4 sm:p-6 shadow-2xl overflow-y-auto font-mono max-h-[90vh] cursor-default"
         >
           {/* Top Close Button */}
           {onClose && (
