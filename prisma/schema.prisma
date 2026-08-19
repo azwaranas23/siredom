@@ -78,6 +78,8 @@ model TableMaster {
   tableName     String
   pinCode       String         // 4-digit PIN Wasit Login
   status        String         @default("active") // active, idle, maintenance
+  isLocked      Boolean        @default(false)
+  activeDeviceId String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

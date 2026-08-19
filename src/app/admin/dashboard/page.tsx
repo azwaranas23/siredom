@@ -22,6 +22,7 @@ export default function AdminDashboardPage() {
     setMasterTables,
     getTableMatch,
     setAuth,
+    setMatchFromDb,
   } = useScorerStore();
 
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
@@ -44,12 +45,27 @@ export default function AdminDashboardPage() {
       const res = await getTablesByTenant(codeToUse);
 
       if (res.success) {
-        setMasterTables(res.data || []);
+        const tables = res.data || [];
+        setMasterTables(tables);
+
         if (res.tenantInfo) {
           setTenantInfo({
             subscriptionPlan: res.tenantInfo.subscriptionPlan,
             maxTables: res.tenantInfo.maxTables,
           });
+        }
+
+        // Fetch active DB matches for each table so status ("SIAP MAIN" / "SESI AKTIF") updates instantly
+        for (const tbl of tables) {
+          try {
+            const mRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tbl.tableNumber}`);
+            const mJson = await mRes.json();
+            if (mJson.data && mJson.data.players) {
+              setMatchFromDb(mJson.data);
+            }
+          } catch (e) {
+            console.error(`Failed to fetch match for table #${tbl.tableNumber}:`, e);
+          }
         }
       }
     } catch (err) {

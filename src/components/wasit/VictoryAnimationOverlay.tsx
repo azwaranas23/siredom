@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ActionType } from '@/types/domino';
+import { useScorerStore } from '@/store/useScorerStore';
 
 interface Props {
   actionType: ActionType | null;
@@ -17,63 +18,55 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
   useEffect(() => {
     if (!actionType) return;
 
-    // Duolingo-style custom confetti physics per win action
+    // Skip round victory confetti if match is completed to avoid duplicate confetti stack
+    const isMatchCompleted = useScorerStore.getState().match.status === 'completed';
+    if (isMatchCompleted) {
+      const timer = setTimeout(() => {
+        onComplete();
+      }, 1800);
+      return () => clearTimeout(timer);
+    }
+
+    // Duolingo-style light confetti physics per win action
     if (actionType === 'menang_biasa') {
       confetti({
-        particleCount: 100,
-        spread: 80,
-        origin: { y: 0.55 },
+        particleCount: 35,
+        spread: 60,
+        origin: { y: 0.5 },
         colors: ['#f59e0b', '#fbbf24', '#06b6d4', '#ffffff'],
+        disableForReducedMotion: true,
       });
     } else if (actionType === 'kandang') {
-      // Fiery ember confetti burst
       confetti({
-        particleCount: 140,
-        spread: 100,
+        particleCount: 40,
+        spread: 70,
         origin: { y: 0.5 },
-        colors: ['#ea580c', '#f97316', '#ef4444', '#f59e0b', '#7c2d12'],
+        colors: ['#ea580c', '#f97316', '#ef4444', '#f59e0b'],
+        disableForReducedMotion: true,
       });
     } else if (actionType === 'ceki') {
-      // Emerald checkmark confetti explosion
       confetti({
-        particleCount: 120,
-        spread: 90,
-        origin: { y: 0.55 },
-        colors: ['#10b981', '#34d399', '#059669', '#a7f3d0', '#ffffff'],
+        particleCount: 35,
+        spread: 60,
+        origin: { y: 0.5 },
+        colors: ['#10b981', '#34d399', '#059669', '#ffffff'],
+        disableForReducedMotion: true,
       });
     } else if (actionType === 'palang') {
-      // HEBOH G.O.A.T. Multi-Cannon Confetti Explosion!
-      const duration = 1.2 * 1000;
-      const end = Date.now() + duration;
-
-      const frame = () => {
-        confetti({
-          particleCount: 8,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0, y: 0.6 },
-          colors: ['#a855f7', '#c084fc', '#f59e0b', '#eab308', '#38bdf8'],
-        });
-        confetti({
-          particleCount: 8,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1, y: 0.6 },
-          colors: ['#a855f7', '#c084fc', '#f59e0b', '#eab308', '#38bdf8'],
-        });
-
-        if (Date.now() < end) {
-          requestAnimationFrame(frame);
-        }
-      };
-      frame();
-    } else if (actionType === 'tangkap') {
-      // Police Red-Blue Siren burst
       confetti({
-        particleCount: 120,
-        spread: 95,
+        particleCount: 45,
+        spread: 75,
         origin: { y: 0.5 },
-        colors: ['#3b82f6', '#ef4444', '#1d4ed8', '#b91c1c', '#ffffff'],
+        colors: ['#a855f7', '#c084fc', '#f59e0b', '#38bdf8'],
+        disableForReducedMotion: true,
+      });
+    } else if (actionType === 'tangkap') {
+      confetti({
+        particleCount: 35,
+        spread: 65,
+        origin: { y: 0.5 },
+        colors: ['#3b82f6', '#ef4444', '#1d4ed8', '#ffffff'],
+        disableForReducedMotion: true,
       });
     }
 

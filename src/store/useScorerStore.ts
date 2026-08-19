@@ -68,8 +68,12 @@ interface ScorerStore {
 
   // Actions
   setAuth: (authenticated: boolean, role: Role, tenantCode?: string, tableNum?: number) => void;
+  logout: () => void;
+  setMatchFromDb: (dbMatch: any) => void;
   updateMatchSetup: (players: { seatNumber: 1 | 2 | 3 | 4; name: string }[], matchMode: 'rounds' | 'points', targetValue: number, pointsConfig?: PointsConfig) => void;
+  updateTargetMidGame: (matchMode: 'rounds' | 'points', targetValue: number) => void;
   updatePlayerNames: (playersInput: { seatNumber: 1 | 2 | 3 | 4; name: string }[]) => void;
+  updateSinglePlayerName: (playerId: string, newName: string) => void;
   updateTablePin: (tableId: string, newPin: string) => void;
   updateTableName: (tableId: string, newTableName: string) => void;
   setMasterTables: (tables: TableMaster[]) => void;
@@ -82,9 +86,8 @@ interface ScorerStore {
   deleteTenant: (tenantId: string) => void;
   toggleTenantStatus: (tenantId: string) => void;
 
-
-  
   // FSM Step Handlers
+  selectWinnerPlayer: (winnerId: string) => void;
   selectWinnerAndAction: (winnerId: string, action: ActionType) => void;
   setManualPlayerStatus: (playerId: string, status: 'berdiri' | 'duduk') => void;
   selectTangkapVictim: (victimId: string) => void;
@@ -100,7 +103,7 @@ interface ScorerStore {
   getTableMatch: (tableNum?: number) => Match;
   getAllMatchHistory: () => Match[];
   getRankedPlayers: (targetTableNum?: number) => (Player & { rank: number })[];
-
+  getWinstreak: (playerId: string, targetTableNum?: number) => number;
   getLast5RoundHistory: (playerId: string, targetTableNum?: number) => RoundHistoryIcon[];
   getFunAwards: (targetTableNum?: number) => FunAwards;
   getTelemetryData: (targetTableNum?: number) => { round: string; [playerName: string]: number | string }[];
@@ -148,6 +151,69 @@ export const useScorerStore = create<ScorerStore>()(
         });
       },
 
+      logout: () => {
+        set({
+          isAuthenticated: false,
+          userRole: 'wasit',
+        });
+      },
+
+      setMatchFromDb: (dbMatch: any) => {
+        if (!dbMatch) return;
+        const currentMatch = get().match;
+        const curTableNum = dbMatch.tableNumber || get().tableNumber;
+
+        const formattedPlayers = (dbMatch.players || []).map((p: any) => ({
+          id: p.id,
+          seatNumber: p.seatNumber,
+          name: p.name,
+          currentScore: p.currentScore ?? 0,
+        }));
+
+        const newMatchState: Match = {
+          ...currentMatch,
+          id: dbMatch.id || currentMatch.id,
+          tableNumber: curTableNum,
+          matchMode: (dbMatch.matchMode?.toLowerCase() as any) || currentMatch.matchMode,
+          targetValue: dbMatch.targetValue || currentMatch.targetValue,
+          pointsConfig: dbMatch.pointsConfig || currentMatch.pointsConfig,
+          status: (dbMatch.status?.toLowerCase() as any) || currentMatch.status,
+          players: formattedPlayers.length === 4 ? formattedPlayers : currentMatch.players,
+          rounds: dbMatch.rounds || [],
+        };
+
+        const updatedSessions = {
+          ...(get().tableSessions || DEFAULT_TABLE_SESSIONS),
+          [curTableNum]: newMatchState,
+        };
+
+        set({
+          match: newMatchState,
+          tableSessions: updatedSessions,
+        });
+      },
+
+      updateTargetMidGame: (matchMode, targetValue) => {
+        const currentMatch = get().match;
+        const curTableNum = currentMatch.tableNumber || get().tableNumber;
+
+        const newMatchState: Match = {
+          ...currentMatch,
+          matchMode,
+          targetValue,
+        };
+
+        const updatedSessions = {
+          ...(get().tableSessions || DEFAULT_TABLE_SESSIONS),
+          [curTableNum]: newMatchState,
+        };
+
+        set({
+          match: newMatchState,
+          tableSessions: updatedSessions,
+        });
+      },
+
       updatePlayerNames: (playersInput) => {
         const currentMatch = get().match;
         const curTableNum = currentMatch.tableNumber || get().tableNumber;
@@ -173,6 +239,40 @@ export const useScorerStore = create<ScorerStore>()(
         set({
           match: newMatchState,
           tableSessions: updatedSessions,
+        });
+      },
+
+      updateSinglePlayerName: (playerId: string, newName: string) => {
+        const currentMatch = get().match;
+        const curTableNum = currentMatch.tableNumber || get().tableNumber;
+
+        const updatedPlayers = currentMatch.players.map((p) =>
+          p.id === playerId ? { ...p, name: newName } : p
+        );
+
+        const newMatchState: Match = {
+          ...currentMatch,
+          players: updatedPlayers,
+        };
+
+        const updatedSessions = {
+          ...(get().tableSessions || DEFAULT_TABLE_SESSIONS),
+          [curTableNum]: newMatchState,
+        };
+
+        set({
+          match: newMatchState,
+          tableSessions: updatedSessions,
+        });
+      },
+
+      selectWinnerPlayer: (winnerId: string) => {
+        set({
+          selectedWinnerId: winnerId,
+          selectedAction: null,
+          selectedVictimId: null,
+          manualStatuses: {},
+          fsmState: 'CONFIRMATION',
         });
       },
 
@@ -427,10 +527,11 @@ export const useScorerStore = create<ScorerStore>()(
           const scoreAfter = player.currentScore + pointsAwarded;
           roundScores.push({
             playerId: player.id,
+            seatNumber: player.seatNumber,
             status,
             pointsAwarded,
             scoreAfter,
-          });
+          } as any);
 
           deltas[player.id] = pointsAwarded;
         });
@@ -454,13 +555,25 @@ export const useScorerStore = create<ScorerStore>()(
         });
 
         const newRounds = [...match.rounds, newRound];
-        const isMatchComplete = 
-          match.matchMode === 'rounds' 
-            ? newRounds.length >= match.targetValue 
+
+        const sortedPlayers = [...updatedPlayers].sort((a, b) => b.currentScore - a.currentScore);
+        const isRank1Tied =
+          sortedPlayers.length >= 2 &&
+          sortedPlayers[0].currentScore > 0 &&
+          sortedPlayers[0].currentScore === sortedPlayers[1].currentScore;
+
+        const isTargetReached =
+          match.matchMode === 'rounds'
+            ? newRounds.length >= match.targetValue
             : updatedPlayers.some((p) => p.currentScore >= match.targetValue);
+
+        // Tie-Breaker Overtime Logic: If target is reached BUT Rank 1 is tied, extend targetValue by +1 round!
+        const isMatchComplete = isTargetReached && !isRank1Tied;
+        const newTargetValue = isTargetReached && isRank1Tied ? match.targetValue + 1 : match.targetValue;
 
         const newMatchState: Match = {
           ...match,
+          targetValue: newTargetValue,
           players: updatedPlayers,
           rounds: newRounds,
           status: isMatchComplete ? 'completed' : 'in_progress',
@@ -604,6 +717,19 @@ export const useScorerStore = create<ScorerStore>()(
             rank: currentRank,
           };
         });
+      },
+
+      getWinstreak: (playerId: string, targetTableNum?: number) => {
+        const match = targetTableNum ? get().getTableMatch(targetTableNum) : get().match;
+        let streak = 0;
+        for (let i = match.rounds.length - 1; i >= 0; i--) {
+          if (match.rounds[i].winnerPlayerId === playerId) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        return streak;
       },
 
       getLast5RoundHistory: (playerId: string, targetTableNum?: number) => {

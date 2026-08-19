@@ -46,7 +46,7 @@ export default function WasitSetupPage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalTargetValue = Number(targetValue) || (matchMode === 'rounds' ? 10 : 50);
 
@@ -57,6 +57,29 @@ export default function WasitSetupPage() {
     }));
 
     updateMatchSetup(formattedPlayers, matchMode, finalTargetValue, pointsConfig);
+
+    // Persist setup directly to Supabase PostgreSQL database
+    try {
+      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+      await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SETUP_MATCH',
+          tenantCode: codeToUse,
+          tableNumber: tableNumber || 1,
+          setupData: {
+            matchMode,
+            targetValue: finalTargetValue,
+            pointsConfig,
+            players: formattedPlayers,
+          },
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to post SETUP_MATCH to DB API:', err);
+    }
+
     router.push('/wasit/live');
   };
 
@@ -235,10 +258,10 @@ export default function WasitSetupPage() {
       </div>
 
       {/* Bottom Submit Action Bar */}
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="pt-2">
         <button
           type="submit"
-          className="flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-xl shadow-cyan-500/25 transition-all active:scale-95"
+          className="w-full flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-xl shadow-cyan-500/25 transition-all active:scale-98"
         >
           SIMPAN & MULAI SESI WASIT <ArrowRight className="w-5 h-5" />
         </button>

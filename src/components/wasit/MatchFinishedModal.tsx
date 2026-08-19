@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { useRouter } from 'next/navigation';
-import { Trophy, Award, RotateCcw, History, Sparkles } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { Trophy, RotateCcw, Sparkles, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -11,134 +12,219 @@ interface Props {
   onClose?: () => void;
 }
 
-export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
+export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const router = useRouter();
   const { match, getRankedPlayers, getFunAwards, resetMatch } = useScorerStore();
 
-  if (!isOpen || match.status !== 'completed') return null;
+  useEffect(() => {
+    if (isOpen) {
+      // Ultra-light, subtle single confetti pop (15 particles max)
+      confetti({
+        particleCount: 15,
+        spread: 50,
+        origin: { y: 0.35 },
+        colors: ['#f59e0b', '#fbbf24', '#06b6d4', '#e2e8f0', '#3b82f6'],
+        disableForReducedMotion: true,
+      });
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const rankedPlayers = getRankedPlayers();
   const matchWinner = rankedPlayers[0];
+  const runnerUps = rankedPlayers.slice(1); // Ranks 2, 3, 4
   const awards = getFunAwards();
 
   const handleStartNewMatch = () => {
     resetMatch();
+    if (onClose) onClose();
   };
 
-  const handleGoToAudit = () => {
-    router.push('/wasit/audit');
+  const getRankBadgeInfo = (rankNum: number) => {
+    switch (rankNum) {
+      case 2:
+        return {
+          label: 'PERINGKAT 2',
+          emoji: '🥈',
+          badgeStyle: 'bg-slate-800 text-slate-200 border-slate-600',
+          scoreColor: 'text-slate-200',
+        };
+      case 3:
+        return {
+          label: 'PERINGKAT 3',
+          emoji: '🥉',
+          badgeStyle: 'bg-amber-950/80 text-amber-400 border-amber-700/80',
+          scoreColor: 'text-amber-400',
+        };
+      case 4:
+      default:
+        return {
+          label: 'PERINGKAT 4',
+          emoji: '🧱',
+          badgeStyle: 'bg-rose-950/60 text-rose-400 border-rose-900/80',
+          scoreColor: 'text-rose-400',
+        };
+    }
   };
+
+  const activeAwards = [
+    awards.rajaKandang && { key: 'kandang', label: '🔥 Raja Kandang', player: awards.rajaKandang.player.name, count: `${awards.rajaKandang.count}x`, bg: 'bg-orange-950/30 border-orange-800/50 text-orange-400' },
+    awards.terbanyakPalang && { key: 'palang', label: '🐐 Terbanyak Palang', player: awards.terbanyakPalang.player.name, count: `${awards.terbanyakPalang.count}x`, bg: 'bg-purple-950/30 border-purple-800/50 text-purple-400' },
+    awards.cekiMaster && { key: 'ceki', label: '✅ Ceki Master', player: awards.cekiMaster.player.name, count: `${awards.cekiMaster.count}x`, bg: 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400' },
+    awards.palingSeringDitangkap && { key: 'tangkap', label: '💀 Korban Tangkap', player: awards.palingSeringDitangkap.player.name, count: `${awards.palingSeringDitangkap.count}x`, bg: 'bg-rose-950/30 border-rose-800/50 text-rose-400' },
+  ].filter(Boolean);
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+      <div
+        onClick={() => onClose && onClose()}
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/90 backdrop-blur-md cursor-pointer animate-in fade-in duration-200"
+      >
         <motion.div
-          initial={{ scale: 0.85, opacity: 0, y: 30 }}
+          onClick={(e) => e.stopPropagation()}
+          initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.85, opacity: 0, y: 30 }}
-          className="relative max-w-lg w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-6 shadow-2xl overflow-hidden font-sans text-center"
+          exit={{ scale: 0.95, opacity: 0, y: 15 }}
+          className="relative max-w-4xl w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden font-mono max-h-[92vh] scrollbar-none cursor-default"
         >
-          {/* Top Radial Glow Background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-amber-500/20 via-cyan-500/10 to-transparent opacity-60 pointer-events-none" />
-
-          {/* Trophy Icon */}
-          <motion.div
-            initial={{ scale: 0.4, rotate: -15 }}
-            animate={{ scale: [0.8, 1.2, 1], rotate: [0, 5, 0] }}
-            transition={{ duration: 0.7 }}
-            className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-amber-500 to-yellow-300 p-0.5 mx-auto mb-4 shadow-xl shadow-amber-500/30 flex items-center justify-center text-slate-950 text-4xl font-bold"
-          >
-            🏆
-          </motion.div>
-
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950 border border-amber-800 text-amber-300 text-xs font-mono font-extrabold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            PERTANDINGAN SELESAI
-          </div>
-
-          <h2 className="text-2xl md:text-3xl font-black text-white font-display tracking-tight">
-            JUARA: <span className="text-amber-400">{matchWinner?.name || 'Pemain'}</span>
-          </h2>
-          <p className="text-xs text-slate-300 font-mono mt-1">
-            Mencapai target dengan total <strong className="text-cyan-400">{matchWinner?.currentScore || 0} Poin</strong> dalam {match.rounds.length} Ronde!
-          </p>
-
-          {/* Leaderboard Summary */}
-          <div className="mt-5 space-y-2 text-left">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono mb-2 flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" /> Klasemen Akhir Pertandingan:
-            </h4>
-
-            {rankedPlayers.map((player, idx) => (
-              <div
-                key={player.id}
-                className={`p-3 rounded-2xl border flex items-center justify-between text-xs font-mono ${
-                  idx === 0
-                    ? 'bg-amber-950/40 border-amber-500/80 text-amber-200 font-bold'
-                    : 'bg-slate-950/80 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
-                    idx === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    #{idx + 1}
-                  </span>
-                  <span className="font-extrabold text-white text-sm font-sans">{player.name}</span>
-                </div>
-                <span className="font-black text-sm text-cyan-400">{player.currentScore} PTS</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Fun Awards Cards */}
-          {(awards.rajaKandang || awards.terbanyakPalang || awards.palingSeringDitangkap || awards.cekiMaster) && (
-            <div className="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-left text-[11px] font-mono">
-              {awards.rajaKandang && (
-                <div className="p-2.5 rounded-xl bg-orange-950/40 border border-orange-800/60">
-                  <span className="text-orange-400 font-bold block">🔥 Raja Kandang</span>
-                  <span className="text-white font-extrabold">{awards.rajaKandang.player.name} ({awards.rajaKandang.count}x)</span>
-                </div>
-              )}
-              {awards.terbanyakPalang && (
-                <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/60">
-                  <span className="text-purple-400 font-bold block">🐐 Terbanyak Palang</span>
-                  <span className="text-white font-extrabold">{awards.terbanyakPalang.player.name} ({awards.terbanyakPalang.count}x)</span>
-                </div>
-              )}
-              {awards.cekiMaster && (
-                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
-                  <span className="text-emerald-400 font-bold block">✅ Ceki Master</span>
-                  <span className="text-white font-extrabold">{awards.cekiMaster.player.name} ({awards.cekiMaster.count}x)</span>
-                </div>
-              )}
-              {awards.palingSeringDitangkap && (
-                <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/60">
-                  <span className="text-rose-400 font-bold block">💀 Korban Tangkap</span>
-                  <span className="text-white font-extrabold">{awards.palingSeringDitangkap.player.name} ({awards.palingSeringDitangkap.count}x)</span>
-                </div>
-              )}
-            </div>
+          {/* Top Close Button */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors z-10"
+              aria-label="Tutup"
+            >
+              <X className="w-4 h-4" />
+            </button>
           )}
 
-          {/* Action Buttons */}
-          <div className="mt-6 flex flex-col sm:flex-row items-center gap-2">
-            <button
-              onClick={handleStartNewMatch}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
-            >
-              <RotateCcw className="w-4 h-4" /> MULAI MATCH BARU
-            </button>
+          {/* Top Ambient Golden Radial Glow */}
+          <div className="absolute -top-24 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-            <button
-              onClick={handleGoToAudit}
-              className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all"
-            >
-              <History className="w-4 h-4 text-purple-400" /> AUDIT LOG
-            </button>
+          {/* Header Tag */}
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/90 border border-amber-500/60 text-amber-300 text-[10px] font-extrabold uppercase tracking-widest w-fit mb-4 shadow-md">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            PERTANDINGAN SELESAI • MEJA #{match.tableNumber || 1}
+          </div>
+
+          {/* WIDE 2-COLUMN GRID (JUARA 1 ON LEFT, KLASEMEN & AWARDS ON RIGHT) */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+            
+            {/* LEFT COLUMN: 🥇 JUARA 1 WINNER MEDAL CARD + ACTION BUTTONS (col-span-5) */}
+            <div className="md:col-span-5 bg-gradient-to-b from-amber-950/30 via-slate-950/60 to-slate-950 border border-amber-500/40 rounded-2xl p-5 flex flex-col justify-between text-center relative overflow-hidden">
+              <div className="relative space-y-2 my-auto py-2">
+                {/* Glowing Medal Icon */}
+                <motion.div
+                  initial={{ scale: 0.5, rotate: -10 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                  className="relative w-20 h-20 mx-auto flex items-center justify-center"
+                >
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 animate-pulse blur-md opacity-70" />
+                  <div className="relative w-full h-full rounded-full bg-gradient-to-br from-amber-400 via-yellow-200 to-amber-600 p-1 shadow-2xl flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center border-2 border-amber-300/80 shadow-inner">
+                      <span className="text-4xl drop-shadow-[0_4px_10px_rgba(245,158,11,0.6)]">🥇</span>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block font-sans">
+                  MEDALI PEMENANG JUARA 1
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-white font-display tracking-tight">
+                  {matchWinner?.name || 'Pemain'}
+                </h2>
+                <p className="text-xs text-amber-200/90 font-mono">
+                  Juara 1 dengan <strong className="text-amber-300 font-extrabold">{matchWinner?.currentScore || 0} Poin</strong>
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-2">
+                <button
+                  onClick={onClose || handleStartNewMatch}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  SELESAI & KELUAR <ChevronRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={handleStartNewMatch}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" /> MATCH BARU
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: 📊 KLASEMEN PERINGKAT 2 - 4 + 🏆 FUN AWARDS (col-span-7) */}
+            <div className="md:col-span-7 flex flex-col justify-between space-y-4">
+              
+              {/* Leaderboard Ranks 2, 3, 4 */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5 text-cyan-400" /> KLASEMEN PERINGKAT 2 - 4:
+                </h4>
+
+                <div className="space-y-2">
+                  {runnerUps.map((player, idx) => {
+                    const rankNum = idx + 2; // Rank 2, 3, 4
+                    const rankInfo = getRankBadgeInfo(rankNum);
+
+                    return (
+                      <div
+                        key={player.id}
+                        className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between transition-all hover:border-slate-700"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl border ${rankInfo.badgeStyle}`}>
+                            {rankInfo.emoji} #{rankNum}
+                          </span>
+                          <div>
+                            <span className="font-extrabold text-white text-sm font-sans block leading-tight">
+                              {player.name}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-bold block">
+                              Kursi #{player.seatNumber}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right font-mono">
+                          <span className={`text-base font-black ${rankInfo.scoreColor}`}>
+                            {player.currentScore}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase ml-1">POIN</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dynamic Awards Grid (Widens horizontally based on active win condition awards) */}
+              {activeAwards.length > 0 && (
+                <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-mono">
+                    🎖️ DETAIL KONDISI MENANG:
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    {activeAwards.map((item: any) => (
+                      <div key={item.key} className={`p-2.5 rounded-xl border ${item.bg}`}>
+                        <span className="font-bold block text-[10px] uppercase tracking-wider">{item.label}</span>
+                        <span className="text-white font-extrabold text-xs">{item.player} ({item.count})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
           </div>
         </motion.div>
       </div>
     </AnimatePresence>
   );
 };
+

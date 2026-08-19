@@ -91,7 +91,7 @@ async function main() {
           { seatNumber: 1, name: 'Maman', currentScore: 0 },
           { seatNumber: 2, name: 'Topati', currentScore: 0 },
           { seatNumber: 3, name: 'Fatir', currentScore: 0 },
-          { seatNumber: 4, name: 'Udin', currentScore: 0 },
+          { seatNumber: 4, name: 'Yusril', currentScore: 0 },
         ],
       },
     },
