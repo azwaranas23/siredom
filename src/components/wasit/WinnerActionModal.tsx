@@ -7,11 +7,11 @@ import { X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const ACTIONS: { type: ActionType; label: string; icon: string }[] = [
-  { type: 'menang_biasa', label: 'MENANG BIASA', icon: '👑' },
-  { type: 'kandang', label: 'KANDANG', icon: '🔥' },
-  { type: 'ceki', label: 'CEKI', icon: '✅' },
-  { type: 'palang', label: 'PALANG', icon: '🐐' },
-  { type: 'tangkap', label: 'TANGKAP', icon: '🚓' },
+  { type: 'MENANG_BIASA', label: 'MENANG BIASA', icon: '👑' },
+  { type: 'KANDANG', label: 'KANDANG', icon: '🔥' },
+  { type: 'CEKI', label: 'CEKI', icon: '✅' },
+  { type: 'PALANG', label: 'PALANG', icon: '🐐' },
+  { type: 'TANGKAP', label: 'TANGKAP', icon: '🚓' },
 ];
 
 interface Props {

@@ -5,7 +5,6 @@ import { useScorerStore } from '@/store/useScorerStore';
 import { ActionType, Round } from '@/types/domino';
 import { ArrowRight } from 'lucide-react';
 
-
 const SEAT_DOT_COLORS = [
   'bg-rose-500',   // Seat 1
   'bg-cyan-400',   // Seat 2
@@ -27,16 +26,15 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
   const winner = match.players.find((p) => p.id === selectedWinnerId);
   const remainingPlayers = match.players.filter((p) => p.id !== selectedWinnerId);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const winnerName = winner?.name || '';
     const actionType = selectedAction;
-    const committed = commitCurrentRound();
+    const committed = await commitCurrentRound();
     if (committed && actionType) {
       onSuccess(committed, actionType, winnerName);
     }
     onClose();
   };
-
 
   return (
     <>
@@ -57,21 +55,22 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
             Status Pemain Lainnya
           </h2>
           <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-            Pemenang: <strong className="text-cyan-400">{winner?.name}</strong> ({selectedAction.toUpperCase()})
+            Pemenang: <strong className="text-cyan-400">{winner?.name}</strong> ({String(selectedAction).toUpperCase()})
           </p>
         </div>
 
-
         {/* Compact Player Status Rows */}
-        <div className="space-y-2 max-w-3xl mx-auto mb-4">
+        <div className="space-y-2.5 max-w-3xl mx-auto mb-4 font-mono">
           {remainingPlayers.map((player) => {
-            const currentStatus = manualStatuses[player.id] || 'duduk';
+            const currentStatus = String(manualStatuses[player.id] || 'DUDUK').toUpperCase();
             const dotColor = SEAT_DOT_COLORS[player.seatNumber - 1] || 'bg-slate-400';
+            const isBerdiri = currentStatus === 'BERDIRI';
+            const isDuduk = currentStatus === 'DUDUK';
 
             return (
               <div
                 key={player.id}
-                className="bg-slate-900/90 border border-slate-800/80 rounded-xl p-2.5 px-4 flex items-center justify-between shadow-sm"
+                className="bg-slate-900/90 border border-slate-800/80 rounded-xl p-3 px-4 flex items-center justify-between shadow-sm"
               >
                 {/* Left: Seat Indicator Dot + Name */}
                 <div className="flex items-center gap-2.5">
@@ -79,46 +78,37 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                   <span className="text-sm md:text-base font-extrabold text-white font-sans">
                     {player.name}
                   </span>
+                  <span className="text-[10px] text-slate-500 font-mono font-bold">K#{player.seatNumber}</span>
                 </div>
 
-                {/* Right: Compact Side-by-side BERDIRI vs DUDUK Buttons */}
-                <div className="flex items-center gap-2">
+                {/* Right: Side-by-side BERDIRI vs DUDUK Buttons with Solid Active Highlight */}
+                <div className="flex items-center gap-2.5">
+                  {/* DUDUK Button (Default Active) */}
                   <button
                     type="button"
-                    onClick={() => setManualPlayerStatus(player.id, 'berdiri')}
-                    className={`rounded-lg p-1.5 px-3 min-w-[70px] flex items-center gap-1.5 justify-center transition-all cursor-pointer ${
-                      currentStatus === 'berdiri'
-                        ? 'bg-[#2a1715] border-2 border-orange-500 text-orange-300 shadow-md shadow-orange-950/50 scale-105'
-                        : 'bg-slate-950/70 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    onClick={() => setManualPlayerStatus(player.id, 'DUDUK')}
+                    className={`rounded-xl px-3.5 py-2 min-w-[90px] flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                      isDuduk
+                        ? 'bg-emerald-500 text-slate-950 border-2 border-emerald-300 shadow-lg shadow-emerald-500/40 scale-105'
+                        : 'bg-slate-950/80 border border-slate-800 text-slate-400 opacity-60 hover:opacity-100 hover:text-white'
                     }`}
                   >
-                    <span className="text-base">😭</span>
-                    <span
-                      className={`text-[10px] font-black tracking-wider font-mono uppercase ${
-                        currentStatus === 'berdiri' ? 'text-orange-400' : 'text-slate-400'
-                      }`}
-                    >
-                      BERDIRI
-                    </span>
+                    <span className="text-sm">🪑</span>
+                    <span>DUDUK</span>
                   </button>
 
+                  {/* BERDIRI Button */}
                   <button
                     type="button"
-                    onClick={() => setManualPlayerStatus(player.id, 'duduk')}
-                    className={`rounded-lg p-1.5 px-3 min-w-[70px] flex items-center gap-1.5 justify-center transition-all cursor-pointer ${
-                      currentStatus === 'duduk'
-                        ? 'bg-[#13281e] border-2 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-950/50 scale-105'
-                        : 'bg-slate-950/70 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    onClick={() => setManualPlayerStatus(player.id, 'BERDIRI')}
+                    className={`rounded-xl px-3.5 py-2 min-w-[90px] flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                      isBerdiri
+                        ? 'bg-rose-600 text-white border-2 border-rose-300 shadow-lg shadow-rose-600/40 scale-105'
+                        : 'bg-slate-950/80 border border-slate-800 text-slate-400 opacity-60 hover:opacity-100 hover:text-white'
                     }`}
                   >
-                    <span className="text-base">🪑</span>
-                    <span
-                      className={`text-[10px] font-black tracking-wider font-mono uppercase ${
-                        currentStatus === 'duduk' ? 'text-emerald-400' : 'text-slate-400'
-                      }`}
-                    >
-                      DUDUK
-                    </span>
+                    <span className="text-sm">😭</span>
+                    <span>BERDIRI</span>
                   </button>
                 </div>
               </div>
@@ -130,7 +120,7 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         <div className="max-w-3xl mx-auto">
           <button
             onClick={handleConfirm}
-            className="w-full py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs md:text-sm font-display uppercase tracking-wider shadow-lg shadow-cyan-400/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.99]"
+            className="w-full py-3.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs md:text-sm font-display uppercase tracking-wider shadow-lg shadow-cyan-400/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.99] cursor-pointer"
           >
             Konfirmasi & Lanjut <ArrowRight className="w-4 h-4" />
           </button>

@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
-import { Tv, Trophy, TrendingUp, Radio, Activity, ChevronDown, AlertCircle } from 'lucide-react';
-import { Match, Player } from '@/types/domino';
+import { Tv, Trophy, TrendingUp, Radio, ChevronDown, AlertCircle } from 'lucide-react';
+import { Match } from '@/types/domino';
+import { supabase } from '@/lib/supabase';
 
 const PLAYER_COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b']; // Red, Blue, Green, Yellow
 
 export default function LeaderboardTVPage() {
-  const { masterTables, tenantCode, tableNumber } = useScorerStore();
+  const { tenantCode, tableNumber } = useScorerStore();
   const [selectedTableNum, setSelectedTableNum] = useState<number>(tableNumber || 1);
   const [isClient, setIsClient] = useState(false);
   const [liveMatch, setLiveMatch] = useState<Match | null>(null);
@@ -33,12 +34,45 @@ export default function LeaderboardTVPage() {
           id: m.id,
           tenantId: m.tenantId,
           tableNumber: m.tableNumber,
+          rulesetMode: m.rulesetMode || 'CASUAL',
+          matchCategory: m.matchCategory || 'SINGLE_1V1V1V1',
           matchMode: (m.matchMode?.toLowerCase() as any) || 'rounds',
+          targetType: m.targetType || 'FIXED_ROUNDS',
           targetValue: m.targetValue,
+          currentSet: m.currentSet || 1,
+          teamASetWins: m.teamASetWins || 0,
+          teamBSetWins: m.teamBSetWins || 0,
           pointsConfig: m.pointsConfig,
+          rulesConfig: m.rulesConfig,
           status: (m.status?.toLowerCase() as any) || 'in_progress',
-          players: m.players || [],
-          rounds: m.rounds || [],
+          players: (m.players || m.playersData || []).map((p: any) => ({
+            id: p.id,
+            seatNumber: p.seatNumber,
+            name: p.name,
+            teamIdentifier: p.teamIdentifier || (p.seatNumber % 2 === 1 ? 'TEAM_A' : 'TEAM_B'),
+            currentScore: p.currentScore ?? 0,
+            totalScore: p.totalScore ?? 0,
+          })),
+          rounds: (m.rounds || m.roundsHistory || []).map((r: any) => ({
+            id: r.id,
+            setNumber: r.setNumber || 1,
+            roundNumber: r.roundNumber,
+            actionType: r.actionType,
+            winnerPlayerId: r.winnerPlayerId,
+            winnerTeam: r.winnerTeam,
+            victimPlayerId: r.victimPlayerId,
+            winType: r.winType,
+            rawPointsInput: r.rawPointsInput,
+            isPenalty: r.isPenalty,
+            timestamp: r.timestamp || new Date().toISOString(),
+            scores: (r.scores || []).map((s: any) => ({
+              playerId: s.playerId,
+              seatNumber: s.seatNumber,
+              status: s.statusTag || 'DUDUK',
+              pointsAwarded: s.pointsAwarded ?? 0,
+              scoreAfter: s.scoreAfter ?? 0,
+            })),
+          })),
         };
         setLiveMatch(formattedMatch);
       } else {
@@ -55,24 +89,48 @@ export default function LeaderboardTVPage() {
   useEffect(() => {
     fetchLiveMatchForTable(selectedTableNum, true);
 
-    // Silent background polling every 3 seconds
+    // Silent background polling every 4 seconds as fallback
     const interval = setInterval(() => {
       fetchLiveMatchForTable(selectedTableNum, false);
-    }, 3000);
+    }, 4000);
 
     return () => clearInterval(interval);
   }, [selectedTableNum, tenantCode]);
 
+  // Subscribe to Supabase Realtime broadcast for instant updates (<150ms)
+  useEffect(() => {
+    if (!liveMatch?.id || liveMatch.id === 'empty') return;
+
+    const channel = supabase
+      .channel(`match:${liveMatch.id}`)
+      .on('broadcast', { event: 'ROUND_COMMITTED' }, (payload) => {
+        if (payload.payload?.match) {
+          fetchLiveMatchForTable(selectedTableNum, false);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [liveMatch?.id, selectedTableNum]);
+
   if (!isClient) return null;
 
   // Active match data or fallback to empty state
-  const matchToDisplay = liveMatch || {
+  const matchToDisplay: Match = liveMatch || {
     id: 'empty',
     tenantId: tenantCode || 'TAB-SLOWBAR',
     tableNumber: selectedTableNum,
+    rulesetMode: 'CASUAL',
+    matchCategory: 'SINGLE_1V1V1V1',
     matchMode: 'rounds' as const,
+    targetType: 'FIXED_ROUNDS',
     targetValue: 10,
-    pointsConfig: { menang_biasa: 1, kandang: 3, ceki: 2, palang: 3, tangkap: 2, ditangkap: -3, berdiri: 0, duduk: 0 },
+    currentSet: 1,
+    teamASetWins: 0,
+    teamBSetWins: 0,
+    pointsConfig: { menang_biasa: 1, kandang: 2, ceki: 3, palang: 4, tangkap: 3, ditangkap: -3, berdiri: 0, duduk: 0 },
     status: 'in_progress' as const,
     players: [],
     rounds: [],
@@ -80,7 +138,6 @@ export default function LeaderboardTVPage() {
 
   // Get ranked players sorted by score
   const sortedPlayers = [...matchToDisplay.players].sort((a, b) => b.currentScore - a.currentScore);
-  const currentLeader = sortedPlayers.length > 0 && sortedPlayers[0].currentScore > 0 ? sortedPlayers[0] : null;
 
   // Compute telemetry line chart data per round
   const telemetryChartData = matchToDisplay.rounds.map((round) => {

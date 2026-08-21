@@ -12,3 +12,17 @@ export const isSupabaseConfigured = () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 };
+
+export async function broadcastRoundCommitted(matchId: string, payload: any) {
+  try {
+    const channel = supabase.channel(`match:${matchId}`);
+    await channel.send({
+      type: 'broadcast',
+      event: 'ROUND_COMMITTED',
+      payload,
+    });
+  } catch (err) {
+    console.error('Failed to broadcast realtime event:', err);
+  }
+}
+

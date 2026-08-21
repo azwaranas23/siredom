@@ -22,6 +22,23 @@ enum MatchMode {
   POINTS
 }
 
+enum RulesetMode {
+  CASUAL
+  PB_PORDI
+  PB_ORADO
+}
+
+enum MatchCategory {
+  SINGLE_1V1V1V1
+  TEAM_2V2
+}
+
+enum TeamIdentifier {
+  NONE
+  TEAM_A
+  TEAM_B
+}
+
 enum MatchStatus {
   SETUP
   IN_PROGRESS
@@ -35,6 +52,16 @@ enum ActionType {
   CEKI
   PALANG
   TANGKAP
+  ORADO_COUNT
+  DENDA_POIN
+}
+
+enum RoundStatusTag {
+  MENANG
+  DITANGKAP
+  BERDIRI
+  DUDUK
+  DENDA
 }
 
 // 1. Tabel Master Tenant (SaaS Warkop / Cafe Mitra)
@@ -89,67 +116,29 @@ model TableMaster {
   @@unique([tenantId, tableNumber])
 }
 
-// 4. Tabel Sesi Pertandingan Live Per Meja
+// 4. Tabel Sesi Pertandingan Live Per Meja (JSON Document-Relational Model)
 model MatchSession {
-  id          String       @id @default(uuid())
-  tenantId    String
-  tableId     String
-  tableNumber Int          @default(1)
-  matchMode   MatchMode    @default(ROUNDS)
-  targetValue Int          @default(10)
-  pointsConfig Json?       // Konfigurasi Poin (+1, +2, +3, +4, -3)
-  status      MatchStatus  @default(IN_PROGRESS)
-  winnerId    String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String         @id @default(uuid())
+  tenantId      String
+  tableId       String
+  tableNumber   Int            @default(1)
+  rulesetMode   RulesetMode    @default(CASUAL)
+  matchCategory MatchCategory  @default(SINGLE_1V1V1V1)
+  matchMode     MatchMode      @default(ROUNDS)
+  targetType    String         @default("FIXED_ROUNDS") // "FIXED_ROUNDS" | "RACE_TO_POINTS" | "SET_101"
+  targetValue   Int            @default(10)
+  currentSet    Int            @default(1)
+  teamASetWins  Int            @default(0)
+  teamBSetWins  Int            @default(0)
+  pointsConfig  Json?          // Konfigurasi Poin (+1, +2, +3, +4, -3)
+  rulesConfig   Json?          // Menyimpan bobot poin / ORADO configs
+  playersData   Json?          // Array of player objects [{ id, seatNumber, name, teamIdentifier, currentScore, totalScore }]
+  roundsHistory Json?          // Array of round objects [{ id, setNumber, roundNumber, actionType, winnerPlayerId, winnerTeam, victimPlayerId, winType, rawPointsInput, isPenalty, timestamp, scores }]
+  status        MatchStatus    @default(IN_PROGRESS)
+  winnerId      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  table       TableMaster  @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  players     Player[]
-  rounds      Round[]
-}
-
-// 5. Tabel Pemain Pertandingan (4 Kursi Per Meja)
-model Player {
-  id           String       @id @default(uuid())
-  matchId      String
-  seatNumber   Int          // 1: Merah, 2: Biru, 3: Hijau, 4: Kuning
-  name         String
-  currentScore Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  match        MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  roundScores  RoundScore[]
-
-  @@unique([matchId, seatNumber])
-}
-
-// 6. Tabel History Ronde Pertandingan
-model Round {
-  id             String       @id @default(uuid())
-  matchId        String
-  roundNumber    Int
-  actionType     ActionType
-  winnerPlayerId String
-  victimPlayerId String?      // Khusus aksi 'tangkap'
-  timestamp      DateTime     @default(now())
-
-  match          MatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  scores         RoundScore[]
-
-  @@unique([matchId, roundNumber])
-}
-
-// 7. Tabel Rincian Skor & Status Player Per Ronde
-model RoundScore {
-  id            String   @id @default(uuid())
-  roundId       String
-  playerId      String
-  statusTag     String   // 'menang', 'ditangkap', 'berdiri', 'duduk'
-  pointsAwarded Int
-  scoreAfter    Int
-
-  round         Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table         TableMaster    @relation(fields: [tableId], references: [id], onDelete: Cascade)
 }

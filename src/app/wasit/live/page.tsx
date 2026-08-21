@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
-import { ActionType, Player } from '@/types/domino';
+import { ActionType, Player, TeamIdentifier } from '@/types/domino';
 import { VictoryAnimationOverlay } from '@/components/wasit/VictoryAnimationOverlay';
+import { TeamScoreHeader } from '@/components/wasit/TeamScoreHeader';
+import { PenaltyModal } from '@/components/wasit/PenaltyModal';
+import { OradoScoringModal } from '@/components/wasit/OradoScoringModal';
 import { MatchFinishedModal } from '@/components/wasit/MatchFinishedModal';
 import {
-  Crown,
   RotateCcw,
   SlidersHorizontal,
   Flame,
@@ -16,11 +18,42 @@ import {
   Undo2,
   Settings,
   Lock,
-  ChevronRight,
-  Sparkles,
   Pencil,
   AlertTriangle,
+  AlertOctagon,
+  Trophy,
+  Calculator,
+  Zap,
+  Sparkles,
+  WifiOff,
 } from 'lucide-react';
+
+const getSeatInfo = (seatNumber: number) => {
+  switch (seatNumber) {
+    case 1:
+      return { border: 'border-rose-800/80 hover:border-rose-500', bg: 'bg-gradient-to-br from-rose-950/80 to-slate-900', scoreColor: 'text-rose-400' };
+    case 2:
+      return { border: 'border-blue-800/80 hover:border-blue-500', bg: 'bg-gradient-to-br from-blue-950/80 to-slate-900', scoreColor: 'text-blue-400' };
+    case 3:
+      return { border: 'border-emerald-800/80 hover:border-emerald-500', bg: 'bg-gradient-to-br from-emerald-950/80 to-slate-900', scoreColor: 'text-emerald-400' };
+    case 4:
+    default:
+      return { border: 'border-amber-800/80 hover:border-amber-500', bg: 'bg-gradient-to-br from-amber-950/80 to-slate-900', scoreColor: 'text-amber-400' };
+  }
+};
+
+const getRankInfo = (rank: number) => {
+  switch (rank) {
+    case 1:
+      return { emoji: '👑', badgeBg: 'bg-amber-950 text-amber-300 border-amber-500' };
+    case 2:
+      return { emoji: '🥈', badgeBg: 'bg-slate-800 text-slate-300 border-slate-600' };
+    case 3:
+      return { emoji: '🥉', badgeBg: 'bg-amber-900/60 text-amber-400 border-amber-800' };
+    default:
+      return { emoji: '👤', badgeBg: 'bg-slate-900 text-slate-400 border-slate-800' };
+  }
+};
 
 export default function WasitLivePage() {
   const {
@@ -32,6 +65,7 @@ export default function WasitLivePage() {
     manualStatuses,
     tenantCode,
     tableNumber,
+    syncStatus,
     setMatchFromDb,
     selectWinnerPlayer,
     selectWinnerAndAction,
@@ -40,18 +74,22 @@ export default function WasitLivePage() {
     resetFSM,
     commitCurrentRound,
     rollbackLastRound,
+    applyFastPenalty,
+    commitOradoRound,
+    getTeamAScore,
+    getTeamBScore,
     getRankedPlayers,
     getLast5RoundHistory,
     getWinstreak,
     updateTargetMidGame,
     updateSinglePlayerName,
+    startNextSet,
+    resetMatch,
   } = useScorerStore();
 
   const router = useRouter();
   const rankedPlayers = getRankedPlayers();
   const topWinnerId = rankedPlayers[0]?.id;
-
-  const [isPending, startTransition] = useTransition();
 
   // Floating Undo Toast State (4-second timer)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -70,7 +108,13 @@ export default function WasitLivePage() {
   const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string } | null>(null);
   const [newPlayerNameInput, setNewPlayerNameInput] = useState('');
 
-  // Victory Animation Overlay State (using VictoryAnimationOverlay.tsx component)
+  // Modals for Penalty, ORADO Count & Finished Match
+  const [isPenaltyModalOpen, setIsPenaltyModalOpen] = useState(false);
+  const [isOradoModalOpen, setIsOradoModalOpen] = useState(false);
+  const [oradoModalTeam, setOradoModalTeam] = useState<TeamIdentifier>('TEAM_A');
+  const [isMatchFinishedModalOpen, setIsMatchFinishedModalOpen] = useState(false);
+
+  // Victory Animation Overlay State
   const [victoryOverlayData, setVictoryOverlayData] = useState<{
     actionType: ActionType;
     winnerName: string;
@@ -80,6 +124,10 @@ export default function WasitLivePage() {
   // Match Champion Winner Celebration Overlay State
   const [celebrationWinner, setCelebrationWinner] = useState<Player | null>(null);
   const [isCelebrationDismissed, setIsCelebrationDismissed] = useState(false);
+
+  // Calculate Team Scores
+  const teamAScore = getTeamAScore();
+  const teamBScore = getTeamBScore();
 
   // Single-Device Lock Check & Initial Match Load from DB
   useEffect(() => {
@@ -96,7 +144,6 @@ export default function WasitLivePage() {
         const getJson = await getRes.json();
 
         if (getJson.data && getJson.data.players) {
-          // Preserve player scores & rounds from DB without resetting to 0
           setMatchFromDb(getJson.data);
         }
 
@@ -128,7 +175,7 @@ export default function WasitLivePage() {
     acquireLockAndFetchMatch();
   }, [tenantCode, tableNumber, setMatchFromDb]);
 
-  // Trigger Winner Celebration on Match Completion safely without infinite re-render loop
+  // Trigger Winner Celebration on Match Completion safely
   useEffect(() => {
     if (match.status === 'completed' && topWinnerId) {
       if (!celebrationWinner && !isCelebrationDismissed) {
@@ -143,14 +190,14 @@ export default function WasitLivePage() {
   // Handle Toast Trigger
   const triggerUndoToast = (roundNum: number, winnerName: string) => {
     if (toastTimer) clearTimeout(toastTimer);
-    setToastMessage(`Ronde #${roundNum} Tersimpan`);
+    setToastMessage(`Ronde #${roundNum} Tersimpan (${winnerName})`);
     const timer = setTimeout(() => {
       setToastMessage(null);
     }, 4000);
     setToastTimer(timer);
   };
 
-  // Helper for Auto-Committing to Zustand Store + Database API
+  // Helper for Auto-Committing Action-Based FSM Round
   const handleAutoCommit = async () => {
     const roundNumBefore = match.rounds.length + 1;
     const winnerObj = match.players.find((p) => p.id === selectedWinnerId);
@@ -158,7 +205,7 @@ export default function WasitLivePage() {
     const winnerName = winnerObj?.name || 'Pemain';
     const victimName = victimObj?.name;
 
-    const committedRound = commitCurrentRound();
+    const committedRound = await commitCurrentRound();
 
     if (committedRound) {
       triggerUndoToast(roundNumBefore, winnerName);
@@ -167,33 +214,34 @@ export default function WasitLivePage() {
         winnerName,
         victimName,
       });
+    }
+  };
 
-      // Save round directly to Supabase PostgreSQL database
-      try {
-        const codeToUse = tenantCode || 'TAB-SLOWBAR';
-        const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tableNumber}`);
-        const getJson = await getRes.json();
+  // Handle Fast Penalty (PB PORDI)
+  const handleApplyPenalty = async (offenderPlayerId: string, amount: 1 | 4) => {
+    const roundNumBefore = match.rounds.length + 1;
+    const committedRound = await applyFastPenalty(offenderPlayerId, amount);
 
-        if (getJson.data?.id) {
-          await fetch('/api/matches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'COMMIT_ROUND',
-              matchId: getJson.data.id,
-              roundData: {
-                roundNumber: committedRound.roundNumber,
-                actionType: committedRound.actionType,
-                winnerPlayerId: committedRound.winnerPlayerId,
-                victimPlayerId: committedRound.victimPlayerId,
-                playerScores: committedRound.scores,
-              },
-            }),
-          });
-        }
-      } catch (err) {
-        console.error('Failed to commit round to DB:', err);
-      }
+    if (committedRound) {
+      triggerUndoToast(roundNumBefore, `Denda +${amount}`);
+    }
+  };
+
+  // Handle ORADO Count Round Commit
+  const handleCommitOradoRound = async (
+    winnerTeam: TeamIdentifier,
+    winnerPlayerId: string,
+    rawRemainingPoints: number,
+    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean }
+  ) => {
+    const roundNumBefore = match.rounds.length + 1;
+    const winnerObj = match.players.find((p) => p.id === winnerPlayerId);
+    const winnerName = winnerObj?.name || (winnerTeam === 'TEAM_A' ? 'Tim A' : 'Tim B');
+
+    const committedRound = await commitOradoRound(winnerTeam, winnerPlayerId, rawRemainingPoints, multipliers);
+
+    if (committedRound) {
+      triggerUndoToast(roundNumBefore, winnerName);
     }
   };
 
@@ -201,26 +249,7 @@ export default function WasitLivePage() {
   const handleUndo = async () => {
     if (toastTimer) clearTimeout(toastTimer);
     setToastMessage(null);
-    rollbackLastRound();
-
-    try {
-      const codeToUse = tenantCode || 'TAB-SLOWBAR';
-      const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tableNumber}`);
-      const getJson = await getRes.json();
-
-      if (getJson.data?.id) {
-        await fetch('/api/matches', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'ROLLBACK',
-            matchId: getJson.data.id,
-          }),
-        });
-      }
-    } catch (err) {
-      console.error('Failed to rollback DB:', err);
-    }
+    await rollbackLastRound();
   };
 
   // Mid-Game Target Update Handler
@@ -260,7 +289,6 @@ export default function WasitLivePage() {
     updateSinglePlayerName(editingPlayer.id, cleanName);
     setEditingPlayer(null);
 
-    // Save updated player names to database API
     try {
       const codeToUse = tenantCode || 'TAB-SLOWBAR';
       const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tableNumber}`);
@@ -278,6 +306,8 @@ export default function WasitLivePage() {
             action: 'SETUP_MATCH',
             matchId: getJson.data.id,
             setupData: {
+              rulesetMode: match.rulesetMode,
+              matchCategory: match.matchCategory,
               matchMode: match.matchMode,
               targetValue: match.targetValue,
               pointsConfig: match.pointsConfig,
@@ -291,19 +321,27 @@ export default function WasitLivePage() {
     }
   };
 
-  // Order players STRICTLY by seatNumber (1, 2, 3, 4) so positions NEVER swap on score change!
+  // Order players strictly by seatNumber 1..4
   const seatOrderedPlayers = [...match.players].sort((a, b) => a.seatNumber - b.seatNumber);
   const displayPlayers: Player[] =
     seatOrderedPlayers.length === 4
       ? seatOrderedPlayers
       : [
-          { id: `t${tableNumber}-p1`, seatNumber: 1, name: 'Pemain 1', currentScore: 0 },
-          { id: `t${tableNumber}-p2`, seatNumber: 2, name: 'Pemain 2', currentScore: 0 },
-          { id: `t${tableNumber}-p3`, seatNumber: 3, name: 'Pemain 3', currentScore: 0 },
-          { id: `t${tableNumber}-p4`, seatNumber: 4, name: 'Pemain 4', currentScore: 0 },
+          { id: `t${tableNumber}-p1`, seatNumber: 1, name: 'Pemain 1', currentScore: 0, teamIdentifier: 'TEAM_A' },
+          { id: `t${tableNumber}-p2`, seatNumber: 2, name: 'Pemain 2', currentScore: 0, teamIdentifier: 'TEAM_B' },
+          { id: `t${tableNumber}-p3`, seatNumber: 3, name: 'Pemain 3', currentScore: 0, teamIdentifier: 'TEAM_A' },
+          { id: `t${tableNumber}-p4`, seatNumber: 4, name: 'Pemain 4', currentScore: 0, teamIdentifier: 'TEAM_B' },
         ];
 
   const nextRoundNumber = match.rounds.length + 1;
+
+  // PB ORADO Round Opener helper
+  const getOradoOpenerText = (roundNum: number) => {
+    if (roundNum === 1) return 'Balak 0';
+    const seq = [1, 2, 3, 4, 5, 6, 0];
+    const idx = (roundNum - 2) % 7;
+    return `Balak ${seq[idx]}`;
+  };
 
   // Check Overtime Tie-Breaker Condition
   const isRank1Tied =
@@ -316,7 +354,6 @@ export default function WasitLivePage() {
       ? match.rounds.length >= match.targetValue && isRank1Tied
       : rankedPlayers.some((p) => p.currentScore >= match.targetValue) && isRank1Tied;
 
-  // Selected Winner Player Object
   const selectedWinnerObj = displayPlayers.find((p) => p.id === selectedWinnerId);
 
   if (isLockedByOther) {
@@ -325,12 +362,9 @@ export default function WasitLivePage() {
         <Lock className="w-12 h-12 text-rose-500 mx-auto animate-bounce" />
         <h2 className="text-lg font-black text-white uppercase">MEJA #{tableNumber} TERKUNCI</h2>
         <p className="text-xs text-slate-400">
-          Meja ini sedang diakses oleh perangkat wasit lain (Perangkat ID: <span className="text-rose-400 font-bold">{lockedDeviceId?.slice(0, 8)}...</span>).
+          Meja ini sedang diakses oleh perangkat wasit lain (ID: <span className="text-rose-400 font-bold">{lockedDeviceId?.slice(0, 8)}...</span>).
         </p>
-        <p className="text-[11px] text-slate-500">
-          Untuk mencegah tumpang tindih data, hanya 1 perangkat yang diperbolehkan menginput skor Meja ini secara bersamaan. Jika ini adalah sesi Anda, klik tombol di bawah untuk merebut akses.
-        </p>
-        <div className="flex items-center justify-center gap-3 pt-2">
+        <div className="pt-2">
           <button
             onClick={async () => {
               let deviceId = localStorage.getItem('siredom_device_id');
@@ -358,9 +392,9 @@ export default function WasitLivePage() {
               }
               setIsLockedByOther(false);
             }}
-            className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs uppercase shadow-lg shadow-cyan-500/20"
+            className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs uppercase shadow-lg"
           >
-            AMBIL ALIH / REBUT AKSES MEJA ➔
+            AMBIL ALIH MEJA ➔
           </button>
         </div>
       </div>
@@ -369,7 +403,15 @@ export default function WasitLivePage() {
 
   return (
     <div className="h-[calc(100vh-57px)] overflow-hidden select-none bg-slate-950 text-white flex flex-col justify-between font-sans relative">
-      {/* Top Header Controls Bar */}
+      {/* Offline Pending Sync Banner */}
+      {syncStatus === 'OFFLINE_PENDING' && (
+        <div className="bg-amber-950/90 border-b border-amber-800 text-amber-300 px-4 py-1 text-center text-xs font-mono font-bold flex items-center justify-center gap-2 animate-pulse">
+          <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+          <span>Koneksi lambat - Menyimpan di perangkat...</span>
+        </div>
+      )}
+
+      {/* Top Controls Bar */}
       <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2 flex items-center justify-between font-mono text-xs shadow-md">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -382,80 +424,226 @@ export default function WasitLivePage() {
           </div>
 
           <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400">
-            <span>MODE: <strong className="text-cyan-400 uppercase">{match.matchMode}</strong></span>
+            <span>RULESET: <strong className="text-cyan-400 uppercase">{match.rulesetMode || 'CASUAL'}</strong></span>
             <span>•</span>
-            <span>TARGET: <strong className="text-amber-400">{match.targetValue} {match.matchMode === 'rounds' ? 'RONDE' : 'POIN'}</strong></span>
+            <span>KATEGORI: <strong className="text-emerald-400 uppercase">{match.matchCategory === 'TEAM_2V2' ? 'GANDA (2v2)' : 'TUNGGAL'}</strong></span>
           </div>
+
+          {/* PB ORADO Opener Badge */}
+          {match.rulesetMode === 'PB_ORADO' && (
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-purple-400" /> BUKA: <strong>{getOradoOpenerText(nextRoundNumber)}</strong>
+            </span>
+          )}
 
           {/* Overtime Badge Indicator */}
           {isOvertime && (
             <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-500 animate-pulse">
-              ⚡ PERPANJANGAN RONDE (OVERTIME)
+              ⚡ OVERTIME
             </span>
-          )}
-
-          {/* Table Not Setup Warning Badge */}
-          {(match.status === 'setup' || !match.players || match.players.length === 0) && (
-            <button
-              onClick={() => router.push('/wasit/setup')}
-              className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-500 animate-pulse flex items-center gap-1 hover:bg-amber-900 transition-colors"
-              title="Meja belum di-setup! Klik untuk setup meja"
-            >
-              <AlertTriangle className="w-3 h-3 text-amber-400" /> MEJA BELUM DI-SETUP (SETUP SEKARANG)
-            </button>
           )}
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
-          {/* Mid-Game Target Settings Button */}
+          {/* PB PORDI Rapid Penalty Buttons */}
+          {match.rulesetMode === 'PB_PORDI' && (
+            <button
+              onClick={() => setIsPenaltyModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 transition-colors flex items-center gap-1 text-[11px] font-bold"
+              title="Panel Denda Wasit"
+            >
+              <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
+              <span>+1/+4 DENDA</span>
+            </button>
+          )}
+
+          {/* PB ORADO Count Button */}
+          {match.rulesetMode === 'PB_ORADO' && (
+            <button
+              onClick={() => setIsOradoModalOpen(true)}
+              className="px-3 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-[11px] uppercase flex items-center gap-1 shadow-md"
+            >
+              <Calculator className="w-3.5 h-3.5 text-purple-200" />
+              <span>INPUT HITUNGAN</span>
+            </button>
+          )}
+
+          {/* Target Settings Button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors flex items-center gap-1 text-[11px]"
-            title="Ubah Target Match Mid-Game"
+            className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px]"
+            title="Ubah Target Match"
           >
             <Settings className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline font-bold">UBAH TARGET</span>
           </button>
         </div>
       </div>
 
+      {/* Team 2v2 Aggregate Header Bar */}
+      {match.matchCategory === 'TEAM_2V2' && (
+        <TeamScoreHeader
+          rulesetMode={match.rulesetMode || 'CASUAL'}
+          matchCategory={match.matchCategory}
+          teamAScore={teamAScore}
+          teamBScore={teamBScore}
+          targetValue={match.targetValue}
+          currentSet={match.currentSet || 1}
+          teamASetWins={match.teamASetWins || 0}
+          teamBSetWins={match.teamBSetWins || 0}
+          players={displayPlayers}
+        />
+      )}
+
       {/* MAIN CONTENT AREA */}
       {match.status === 'setup' || !match.players || match.players.length === 0 ? (
-        /* Clean Centered Setup Card when Table is Not Setup */
+        /* Setup Warning Card */
         <div className="flex-1 flex items-center justify-center p-6 font-mono relative">
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl text-center space-y-5 relative overflow-hidden">
-            {/* Top Ambient Glow */}
-            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-80 h-80 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="w-16 h-16 rounded-2xl bg-amber-950/80 border border-amber-500/60 mx-auto flex items-center justify-center text-3xl shadow-inner animate-bounce">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-lg w-full p-6 text-center space-y-5 shadow-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-amber-950/80 border border-amber-500/60 mx-auto flex items-center justify-center text-3xl animate-bounce">
               ⚠️
             </div>
-
             <div>
-              <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest px-3 py-1 rounded-full bg-amber-950 border border-amber-800">
-                PEMBERITAHUAN WASIT MEJA
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-white mt-3 font-display tracking-tight">
-                MEJA #{tableNumber} BELUM DI-SETUP!
-              </h2>
-              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-                Pertandingan pada <strong className="text-cyan-400">{tenantCode || 'MEJA'} • MEJA #{tableNumber}</strong> belum dikonfigurasi. Silakan atur nama 4 pemain fisik dan target nilai pertandingan terlebih dahulu.
+              <h2 className="text-xl font-black text-white font-display">MEJA #{tableNumber} BELUM DI-SETUP!</h2>
+              <p className="text-xs text-slate-300 mt-2">
+                Silakan atur nama 4 pemain dan aturan pertandingan terlebih dahulu.
               </p>
             </div>
+            <button
+              onClick={() => router.push('/wasit/setup')}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-black text-xs uppercase shadow-lg flex items-center justify-center gap-2"
+            >
+              <SlidersHorizontal className="w-4 h-4" /> SETUP MEJA SEKARANG ➔
+            </button>
+          </div>
+        </div>
+      ) : match.matchCategory === 'TEAM_2V2' ? (
+        /* 2 KUADRAN TIM (TIM MERAH VS TIM BIRU) */
+        <div
+          className={`flex-1 p-3 grid grid-cols-1 md:grid-cols-2 gap-4 relative font-mono ${
+            celebrationWinner || victoryOverlayData ? 'pointer-events-none' : ''
+          }`}
+        >
+          {/* KUADRAN TIM A (MERAH & HIJAU) */}
+          <div
+            onClick={() => {
+              if (fsmState === 'IDLE' && match.rulesetMode !== 'PB_ORADO') {
+                const p1 = displayPlayers.find((p) => p.seatNumber === 1);
+                if (p1) selectWinnerPlayer(p1.id);
+              } else if (match.rulesetMode === 'PB_ORADO') {
+                setIsOradoModalOpen(true);
+              }
+            }}
+            className="rounded-3xl border-2 border-rose-800/90 hover:border-rose-500 bg-gradient-to-br from-rose-950/90 via-slate-900 to-slate-950 p-6 shadow-2xl flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase px-3 py-1 rounded-xl bg-rose-950 text-rose-300 border border-rose-700 shadow-md">
+                🔴 TIM A (MERAH & HIJAU)
+              </span>
+              <span className="text-xs font-bold text-slate-400">
+                SET WINS: <strong className="text-rose-400 font-mono text-sm">{match.teamASetWins || 0}</strong>
+              </span>
+            </div>
 
-            <div className="pt-2">
-              <button
-                onClick={() => router.push('/wasit/setup')}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/25 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-              >
-                <SlidersHorizontal className="w-4 h-4" /> SETUP MEJA SEKARANG ➔
-              </button>
+            <div className="my-auto py-4 space-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl sm:text-7xl font-black font-mono tracking-tight text-rose-400">
+                  {teamAScore}
+                </span>
+                <span className="text-sm font-black font-mono text-slate-400 uppercase">POIN AGREGAT</span>
+              </div>
+
+              <div className="pt-2 grid grid-cols-2 gap-2 text-xs font-bold border-t border-rose-900/40">
+                {displayPlayers.filter((p) => p.seatNumber === 1 || p.seatNumber === 3).map((p) => (
+                  <div key={p.id} className="bg-slate-950/80 border border-rose-900/60 p-2.5 rounded-xl flex items-center justify-between">
+                    <span className="text-white truncate font-display">{p.name} (K#{p.seatNumber})</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingPlayer({ id: p.id, name: p.name });
+                        setNewPlayerNameInput(p.name);
+                      }}
+                      className="p-1 text-slate-400 hover:text-cyan-300"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-rose-900/50 pt-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+              <span className="text-[9px] text-slate-500 uppercase font-bold shrink-0">HISTORY TIM A:</span>
+              {getLast5RoundHistory(displayPlayers.find((p) => p.seatNumber === 1)?.id || '').map((h, i) => (
+                <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border flex items-center gap-0.5 shrink-0 ${h.statusClass}`}>
+                  {h.icon} R{h.roundNumber}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* KUADRAN TIM B (BIRU & KUNING) */}
+          <div
+            onClick={() => {
+              if (fsmState === 'IDLE' && match.rulesetMode !== 'PB_ORADO') {
+                const p2 = displayPlayers.find((p) => p.seatNumber === 2);
+                if (p2) selectWinnerPlayer(p2.id);
+              } else if (match.rulesetMode === 'PB_ORADO') {
+                setIsOradoModalOpen(true);
+              }
+            }}
+            className="rounded-3xl border-2 border-blue-800/90 hover:border-blue-500 bg-gradient-to-br from-blue-950/90 via-slate-900 to-slate-950 p-6 shadow-2xl flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] group relative overflow-hidden"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black uppercase px-3 py-1 rounded-xl bg-blue-950 text-blue-300 border border-blue-700 shadow-md">
+                🔵 TIM B (BIRU & KUNING)
+              </span>
+              <span className="text-xs font-bold text-slate-400">
+                SET WINS: <strong className="text-blue-400 font-mono text-sm">{match.teamBSetWins || 0}</strong>
+              </span>
+            </div>
+
+            <div className="my-auto py-4 space-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl sm:text-7xl font-black font-mono tracking-tight text-blue-400">
+                  {teamBScore}
+                </span>
+                <span className="text-sm font-black font-mono text-slate-400 uppercase">POIN AGREGAT</span>
+              </div>
+
+              <div className="pt-2 grid grid-cols-2 gap-2 text-xs font-bold border-t border-blue-900/40">
+                {displayPlayers.filter((p) => p.seatNumber === 2 || p.seatNumber === 4).map((p) => (
+                  <div key={p.id} className="bg-slate-950/80 border border-blue-900/60 p-2.5 rounded-xl flex items-center justify-between">
+                    <span className="text-white truncate font-display">{p.name} (K#{p.seatNumber})</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingPlayer({ id: p.id, name: p.name });
+                        setNewPlayerNameInput(p.name);
+                      }}
+                      className="p-1 text-slate-400 hover:text-cyan-300"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-blue-900/50 pt-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+              <span className="text-[9px] text-slate-500 uppercase font-bold shrink-0">HISTORY TIM B:</span>
+              {getLast5RoundHistory(displayPlayers.find((p) => p.seatNumber === 2)?.id || '').map((h, i) => (
+                <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border flex items-center gap-0.5 shrink-0 ${h.statusClass}`}>
+                  {h.icon} R{h.roundNumber}
+                </span>
+              ))}
             </div>
           </div>
         </div>
       ) : (
-        /* 2x2 Quadrant Player Grid (STRICTLY FIXED BY SEAT NUMBER 1..4) */
+        /* 4 KUADRAN INDIVIDU (1V1V1V1) */
         <div
           className={`flex-1 p-3 grid grid-cols-2 grid-rows-2 gap-3 relative ${
             celebrationWinner || victoryOverlayData ? 'pointer-events-none' : ''
@@ -468,25 +656,38 @@ export default function WasitLivePage() {
             const historyList = getLast5RoundHistory(player.id);
             const winstreak = getWinstreak(player.id);
 
+            const isTeam = match.matchCategory === 'TEAM_2V2';
+            const teamLabel = isTeam ? (player.seatNumber % 2 === 1 ? 'TIM A' : 'TIM B') : null;
+
             return (
               <div
                 key={player.id}
                 onClick={() => {
-                  if (fsmState === 'IDLE') {
+                  if (fsmState === 'IDLE' && match.rulesetMode !== 'PB_ORADO') {
                     selectWinnerPlayer(player.id);
+                  } else if (match.rulesetMode === 'PB_ORADO') {
+                    setIsOradoModalOpen(true);
                   }
                 }}
                 className={`rounded-2xl border ${seatObj.border} ${seatObj.bg} p-4 shadow-xl flex flex-col justify-between transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99] relative overflow-hidden group`}
               >
-                {/* Top Row: Seat & Rank Badge + Inline Edit Pencil Button + Winstreak */}
+                {/* Top Row: Seat, Rank & Team Badge + Pencil Edit */}
                 <div className="flex items-center justify-between font-mono">
                   <div className="flex items-center gap-2">
                     <span className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-lg border ${rankObj.badgeBg}`}>
                       {rankObj.emoji} #{dynamicRank}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-bold">KURSI #{player.seatNumber}</span>
 
-                    {/* Inline Pencil Button to Edit Player Name */}
+                    {teamLabel && (
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg ${
+                        teamLabel === 'TIM A' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-blue-950 text-blue-300 border border-blue-800'
+                      }`}>
+                        {teamLabel}
+                      </span>
+                    )}
+
+                    <span className="text-[10px] text-slate-400 font-bold">K#{player.seatNumber}</span>
+
                     <button
                       type="button"
                       onClick={(e) => {
@@ -495,7 +696,7 @@ export default function WasitLivePage() {
                         setNewPlayerNameInput(player.name);
                       }}
                       className="p-1 rounded bg-slate-900/80 hover:bg-cyan-950 text-slate-400 hover:text-cyan-300 border border-slate-800 transition-colors"
-                      title="Ubah Nama Pemain Ini"
+                      title="Ubah Nama Pemain"
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
@@ -503,21 +704,13 @@ export default function WasitLivePage() {
 
                   {/* Winstreak Badge */}
                   {winstreak >= 3 && (
-                    <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-full border animate-pulse ${
-                        winstreak >= 10
-                          ? 'bg-amber-950 text-amber-300 border-amber-400'
-                          : winstreak >= 5
-                          ? 'bg-cyan-950 text-cyan-300 border-cyan-400'
-                          : 'bg-orange-950 text-orange-300 border-orange-500'
-                      }`}
-                    >
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full border bg-amber-950 text-amber-300 border-amber-400 animate-pulse">
                       🔥 {winstreak}x STREAK
                     </span>
                   )}
                 </div>
 
-                {/* Center Row: Player Name & Giant Current Score */}
+                {/* Center Row: Player Name & Score */}
                 <div className="my-auto py-2">
                   <h2 className="text-lg sm:text-2xl font-black text-white truncate font-display tracking-tight flex items-center justify-between">
                     <span>{player.name}</span>
@@ -540,7 +733,6 @@ export default function WasitLivePage() {
                       <span
                         key={i}
                         className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border flex items-center gap-0.5 shrink-0 ${h.statusClass}`}
-                        title={`Ronde: ${h.label}`}
                       >
                         {h.icon} R{h.roundNumber}
                       </span>
@@ -550,6 +742,139 @@ export default function WasitLivePage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* SET VICTORY / WINNER ACTION MODAL (KHUSUS KATEGORI GANDA 2V2 PADA 101 POIN ATAU COMPLETE) */}
+      {match.matchCategory === 'TEAM_2V2' && (teamAScore >= 101 || teamBScore >= 101 || match.status === 'completed') && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-cyan-500/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 font-mono text-center animate-in zoom-in-95 duration-150">
+            <div className="w-16 h-16 rounded-2xl bg-amber-950/80 border border-amber-500/80 mx-auto flex items-center justify-center text-4xl animate-bounce shadow-xl">
+              👑
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black text-white font-display uppercase tracking-tight">
+                {match.status === 'completed'
+                  ? `JUARA MATCH: ${teamAScore > teamBScore ? 'TIM A (MERAH & HIJAU)' : 'TIM B (BIRU & KUNING)'}`
+                  : `PEMENANG SET #${match.currentSet || 1}: ${teamAScore >= 101 ? 'TIM A (MERAH & HIJAU)' : 'TIM B (BIRU & KUNING)'}`}
+              </h2>
+              <p className="text-xs text-slate-300 mt-1">
+                SKOR SET: <span className="text-rose-400 font-extrabold">{teamAScore} POIN</span> (TIM A) vs{' '}
+                <span className="text-blue-400 font-extrabold">{teamBScore} POIN</span> (TIM B)
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-around text-xs">
+              <div>
+                <span className="text-slate-500 font-bold block uppercase">KEMENANGAN SET TIM A</span>
+                <span className="text-lg font-black text-rose-400">{match.teamASetWins || 0} SET</span>
+              </div>
+              <div className="w-px h-8 bg-slate-800" />
+              <div>
+                <span className="text-slate-500 font-bold block uppercase">KEMENANGAN SET TIM B</span>
+                <span className="text-lg font-black text-blue-400">{match.teamBSetWins || 0} SET</span>
+              </div>
+            </div>
+
+            <div className="pt-2 font-mono">
+              {match.status === 'completed' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Button 1: LIHAT HASIL */}
+                  <button
+                    type="button"
+                    onClick={() => setIsMatchFinishedModalOpen(true)}
+                    className="py-3.5 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Trophy className="w-4 h-4" /> LIHAT HASIL
+                  </button>
+
+                  {/* Button 2: ULANGI MATCH */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      resetMatch();
+                      try {
+                        const codeToUse = tenantCode || 'TAB-SLOWBAR';
+                        const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tableNumber}`);
+                        const getJson = await getRes.json();
+
+                        if (getJson.data?.id) {
+                          const formattedPlayers = displayPlayers.map((p) => ({
+                            seatNumber: p.seatNumber,
+                            name: p.name,
+                          }));
+
+                          await fetch('/api/matches', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'SETUP_MATCH',
+                              matchId: getJson.data.id,
+                              tenantCode: codeToUse,
+                              tableNumber,
+                              setupData: {
+                                rulesetMode: match.rulesetMode,
+                                matchCategory: match.matchCategory,
+                                matchMode: match.matchMode,
+                                targetType: match.targetType,
+                                targetValue: match.targetValue,
+                                pointsConfig: match.pointsConfig,
+                                rulesConfig: match.rulesConfig,
+                                players: formattedPlayers,
+                              },
+                            }),
+                          });
+                        }
+                      } catch (err) {
+                        console.error('Failed to reset match in DB:', err);
+                      }
+                    }}
+                    className="py-3.5 px-4 rounded-2xl bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-300 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" /> ULANGI MATCH
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    startNextSet();
+                    try {
+                      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+                      const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tableNumber}`);
+                      const getJson = await getRes.json();
+
+                      if (getJson.data?.id) {
+                        await fetch('/api/matches', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action: 'COMMIT_ROUND',
+                            matchId: getJson.data.id,
+                            roundData: {
+                              roundNumber: match.rounds.length + 1,
+                              setNumber: (match.currentSet || 1) + 1,
+                              actionType: 'start_next_set',
+                              currentSet: (match.currentSet || 1) + 1,
+                              teamASetWins: match.teamASetWins,
+                              teamBSetWins: match.teamBSetWins,
+                              matchStatus: 'in_progress',
+                            },
+                          }),
+                        });
+                      }
+                    } catch (err) {
+                      console.error('Failed to sync next set to DB:', err);
+                    }
+                  }}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 via-indigo-600 to-blue-600 hover:from-purple-400 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" /> LANJUT KE SET BERIKUTNYA (SET #{(match.currentSet || 1) + 1}) ➔
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -569,7 +894,7 @@ export default function WasitLivePage() {
         </div>
       )}
 
-      {/* Victory Animation Overlay with Duolingo-style Confetti Physics */}
+      {/* Victory Animation Overlay */}
       {victoryOverlayData && (
         <VictoryAnimationOverlay
           actionType={victoryOverlayData.actionType}
@@ -579,11 +904,35 @@ export default function WasitLivePage() {
         />
       )}
 
-      {/* BOTTOM SHEET MODAL DRAWER (Anchored at bottom-0, matching Screenshot 5) */}
+      {/* Penalty Modal for PB PORDI */}
+      <PenaltyModal
+        isOpen={isPenaltyModalOpen}
+        onClose={() => setIsPenaltyModalOpen(false)}
+        players={displayPlayers}
+        matchCategory={match.matchCategory}
+        onApplyPenalty={handleApplyPenalty}
+      />
+
+      {/* ORADO Scoring Modal */}
+      <OradoScoringModal
+        isOpen={isOradoModalOpen}
+        onClose={() => setIsOradoModalOpen(false)}
+        players={displayPlayers}
+        defaultSelectedTeam={oradoModalTeam}
+        onCommitOrado={handleCommitOradoRound}
+      />
+
+      {/* Match Finished Summary Modal */}
+      <MatchFinishedModal
+        isOpen={isMatchFinishedModalOpen || (match.matchCategory === 'SINGLE_1V1V1V1' && match.status === 'completed')}
+        onClose={() => setIsMatchFinishedModalOpen(false)}
+      />
+
+      {/* BOTTOM SHEET MODAL DRAWER for Action-based FSM */}
       {fsmState !== 'IDLE' && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end justify-center">
           <div className="w-full max-w-5xl bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 sm:p-6 shadow-2xl space-y-4 font-mono animate-in slide-in-from-bottom duration-200">
-            {/* Header: Title & Close Button */}
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-black text-white uppercase flex items-center gap-2 font-display">
                 PILIH KEMENANGAN <span className="text-cyan-400 font-extrabold">{selectedWinnerObj?.name || 'PEMAIN'}</span>
@@ -591,41 +940,77 @@ export default function WasitLivePage() {
               <button
                 onClick={resetFSM}
                 className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white"
-                aria-label="Tutup Modal"
               >
                 ✕
               </button>
             </div>
 
-            {/* Step 1: 5 Action Selection Cards in 1 Row (Confirmaction Step) */}
+            {/* Step 1: Dynamic Action Cards by Ruleset Mode */}
             {selectedWinnerId && fsmState === 'CONFIRMATION' && (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {[
-                  { action: 'menang_biasa', label: 'MENANG BIASA', emoji: '👑', desc: 'Poin Standar' },
-                  { action: 'kandang', label: 'KANDANG', emoji: '🔥', desc: 'Auto-Assign Berdiri' },
-                  { action: 'ceki', label: 'CEKI', emoji: '✅', desc: 'Ceki Domino' },
-                  { action: 'palang', label: 'PALANG', emoji: '🐐', desc: 'Palang Domino' },
-                  { action: 'tangkap', label: 'TANGKAP', emoji: '🚓', desc: 'Pilih Korban' },
-                ].map((item) => (
-                  <button
-                    key={item.action}
-                    onClick={() => {
-                      if (item.action === 'kandang') {
-                        // Scenario C: Auto-commit immediately!
-                        selectWinnerAndAction(selectedWinnerId, 'kandang');
-                        handleAutoCommit();
-                      } else if (item.action === 'tangkap') {
-                        selectWinnerAndAction(selectedWinnerId, 'tangkap');
-                      } else {
-                        selectWinnerAndAction(selectedWinnerId, item.action as ActionType);
-                      }
-                    }}
-                    className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-cyan-500 flex flex-col items-center justify-center text-center transition-all hover:scale-105 active:scale-95 group"
-                  >
-                    <span className="text-3xl mb-1.5 group-hover:scale-110 transition-transform">{item.emoji}</span>
-                    <span className="text-xs font-black text-white uppercase block tracking-wider">{item.label}</span>
-                  </button>
-                ))}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {(match.rulesetMode === 'PB_PORDI'
+                    ? [
+                        { action: 'MENANG_BIASA', label: 'DOMI BIASA (+1)', emoji: '👑' },
+                        { action: 'KANDANG', label: 'DOMI BALAK (+2)', emoji: '🀄' },
+                        { action: 'CEKI', label: 'CEKI BIASA (+2)', emoji: '✅' },
+                        { action: 'CEKI_BALAK', label: 'CEKI HABIS (+3)', emoji: '🌟' },
+                        { action: 'PALANG', label: 'APOLLO (+4)', emoji: '🐐' },
+                      ]
+                    : [
+                        { action: 'MENANG_BIASA', label: 'MENANG BIASA (+1)', emoji: '👑' },
+                        { action: 'KANDANG', label: 'KANDANG (+2)', emoji: '🔥' },
+                        { action: 'CEKI', label: 'CEKI (+3)', emoji: '✅' },
+                        { action: 'PALANG', label: 'PALANG (+4)', emoji: '🐐' },
+                        { action: 'TANGKAP', label: 'TANGKAP (+3)', emoji: '🚓' },
+                      ]
+                  ).map((item) => (
+                    <button
+                      key={item.action}
+                      onClick={() => {
+                        if (item.action === 'KANDANG') {
+                          selectWinnerAndAction(selectedWinnerId, 'KANDANG');
+                          handleAutoCommit();
+                        } else if (item.action === 'TANGKAP') {
+                          selectWinnerAndAction(selectedWinnerId, 'TANGKAP');
+                        } else {
+                          selectWinnerAndAction(selectedWinnerId, item.action as ActionType);
+                        }
+                      }}
+                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-cyan-500 flex flex-col items-center justify-center text-center transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+                    >
+                      <span className="text-3xl mb-1.5 group-hover:scale-110 transition-transform">{item.emoji}</span>
+                      <span className="text-xs font-black text-white uppercase block tracking-wider">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Quick Penalty Row for PB_PORDI */}
+                {match.rulesetMode === 'PB_PORDI' && (
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-center gap-3 font-mono">
+                    <span className="text-xs text-slate-400 font-bold uppercase">WASIT QUICK DENDA:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetFSM();
+                        handleApplyPenalty(selectedWinnerId, 1);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-black uppercase cursor-pointer"
+                    >
+                      +1 DENDA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetFSM();
+                        handleApplyPenalty(selectedWinnerId, 4);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-black uppercase cursor-pointer"
+                    >
+                      +4 DENDA PASSED
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -640,7 +1025,6 @@ export default function WasitLivePage() {
                       <button
                         key={p.id}
                         onClick={() => {
-                          // Scenario B: Auto-commit immediately after selecting victim!
                           selectTangkapVictim(p.id);
                           handleAutoCommit();
                         }}
@@ -654,7 +1038,7 @@ export default function WasitLivePage() {
               </div>
             )}
 
-            {/* Step 3: Secondary Player Status Selector (VERTICAL STACK TOP-TO-BOTTOM BY SEAT NUMBER) */}
+            {/* Step 3: Secondary Status Selector */}
             {fsmState === 'MODAL_MANUAL_STATUS' && (
               <div className="space-y-4">
                 <p className="text-xs text-slate-400">Atur status 3 pemain lainnya:</p>
@@ -677,7 +1061,7 @@ export default function WasitLivePage() {
                               onClick={() => setManualPlayerStatus(p.id, 'duduk')}
                               className={`px-3 py-1.5 rounded-xl font-bold text-xs font-mono transition-all ${
                                 st === 'duduk'
-                                  ? 'bg-blue-950 text-blue-300 border border-blue-800 shadow-sm'
+                                  ? 'bg-blue-950 text-blue-300 border border-blue-800'
                                   : 'bg-slate-900 text-slate-500 hover:text-white'
                               }`}
                             >
@@ -688,7 +1072,7 @@ export default function WasitLivePage() {
                               onClick={() => setManualPlayerStatus(p.id, 'berdiri')}
                               className={`px-3 py-1.5 rounded-xl font-bold text-xs font-mono transition-all ${
                                 st === 'berdiri'
-                                  ? 'bg-rose-950 text-rose-300 border border-rose-800 shadow-sm'
+                                  ? 'bg-rose-950 text-rose-300 border border-rose-800'
                                   : 'bg-slate-900 text-slate-500 hover:text-white'
                               }`}
                             >
@@ -714,14 +1098,13 @@ export default function WasitLivePage() {
         </div>
       )}
 
-      {/* Inline Player Name Edit Modal (✏️) */}
+      {/* Inline Player Name Edit Modal */}
       {editingPlayer && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase font-display">
-                <Pencil className="w-4 h-4 text-cyan-400" />
-                UBAH NAMA PEMAIN
+                <Pencil className="w-4 h-4 text-cyan-400" /> UBAH NAMA PEMAIN
               </h3>
               <button
                 onClick={() => setEditingPlayer(null)}
@@ -739,7 +1122,7 @@ export default function WasitLivePage() {
                   value={newPlayerNameInput}
                   onChange={(e) => setNewPlayerNameInput(e.target.value)}
                   placeholder="Masukkan nama pemain..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-extrabold focus:outline-none focus:border-cyan-500 text-sm"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-extrabold focus:outline-none text-sm"
                   autoFocus
                 />
               </div>
@@ -763,14 +1146,13 @@ export default function WasitLivePage() {
         </div>
       )}
 
-      {/* Mid-Game Target Settings Modal (⚙️) */}
+      {/* Mid-Game Target Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase font-display">
-                <Settings className="w-4 h-4 text-cyan-400" />
-                UBAH TARGET MATCH MID-GAME
+                <Settings className="w-4 h-4 text-cyan-400" /> UBAH TARGET MATCH
               </h3>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -816,21 +1198,14 @@ export default function WasitLivePage() {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1 uppercase">TARGET NILAI BATAS</label>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">NILAI TARGET BARU</label>
                 <input
                   type="number"
                   value={editTargetValue}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '') {
-                      setEditTargetValue('');
-                    } else {
-                      setEditTargetValue(val.replace(/^0+(?=\d)/, ''));
-                    }
-                  }}
+                  onChange={(e) => setEditTargetValue(e.target.value)}
                   min={1}
                   max={200}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-extrabold focus:outline-none focus:border-cyan-500 text-sm"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-extrabold text-sm"
                 />
               </div>
             </div>
@@ -846,80 +1221,12 @@ export default function WasitLivePage() {
                 onClick={handleSaveTargetMidGame}
                 className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs uppercase"
               >
-                SIMPAN UBAHAN
+                SIMPAN TARGET
               </button>
             </div>
           </div>
         </div>
       )}
-
-
-
-      {/* Winner Celebration Match Finished Modal Overlay */}
-      <MatchFinishedModal
-        isOpen={Boolean(match.status === 'completed' && !isCelebrationDismissed)}
-        onClose={() => {
-          setIsCelebrationDismissed(true);
-          setCelebrationWinner(null);
-        }}
-      />
     </div>
   );
-}
-
-// Fixed Seat Styling Helper (Strictly Locked by Seat Number 1..4)
-function getSeatInfo(seatNumber: number) {
-  switch (seatNumber) {
-    case 1:
-      return {
-        border: 'border-rose-500/80',
-        bg: 'bg-gradient-to-br from-rose-950/40 via-slate-900 to-slate-950',
-        scoreColor: 'text-rose-300',
-      };
-    case 2:
-      return {
-        border: 'border-blue-500/80',
-        bg: 'bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-950',
-        scoreColor: 'text-blue-300',
-      };
-    case 3:
-      return {
-        border: 'border-emerald-500/80',
-        bg: 'bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950',
-        scoreColor: 'text-emerald-300',
-      };
-    case 4:
-    default:
-      return {
-        border: 'border-amber-500/80',
-        bg: 'bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950',
-        scoreColor: 'text-amber-300',
-      };
-  }
-}
-
-// Dynamic Rank Badge Helper (Changes based on player's current score rank)
-function getRankInfo(rank: number) {
-  switch (rank) {
-    case 1:
-      return {
-        emoji: '👑',
-        badgeBg: 'bg-amber-950 text-amber-300 border-amber-500',
-      };
-    case 2:
-      return {
-        emoji: '🥈',
-        badgeBg: 'bg-slate-800 text-slate-200 border-slate-600',
-      };
-    case 3:
-      return {
-        emoji: '🥉',
-        badgeBg: 'bg-amber-950/60 text-amber-500 border-amber-800',
-      };
-    default:
-      return {
-        emoji: '🧱',
-        badgeBg: 'bg-rose-950/60 text-rose-400 border-rose-900',
-      };
-  }
 }

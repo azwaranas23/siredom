@@ -27,8 +27,10 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
       return () => clearTimeout(timer);
     }
 
+    const normAction = String(actionType).toUpperCase();
+
     // Duolingo-style light confetti physics per win action
-    if (actionType === 'menang_biasa') {
+    if (normAction === 'MENANG_BIASA') {
       confetti({
         particleCount: 35,
         spread: 60,
@@ -36,7 +38,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         colors: ['#f59e0b', '#fbbf24', '#06b6d4', '#ffffff'],
         disableForReducedMotion: true,
       });
-    } else if (actionType === 'kandang') {
+    } else if (normAction === 'KANDANG') {
       confetti({
         particleCount: 40,
         spread: 70,
@@ -44,7 +46,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         colors: ['#ea580c', '#f97316', '#ef4444', '#f59e0b'],
         disableForReducedMotion: true,
       });
-    } else if (actionType === 'ceki') {
+    } else if (normAction === 'CEKI') {
       confetti({
         particleCount: 35,
         spread: 60,
@@ -52,7 +54,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         colors: ['#10b981', '#34d399', '#059669', '#ffffff'],
         disableForReducedMotion: true,
       });
-    } else if (actionType === 'palang') {
+    } else if (normAction === 'PALANG') {
       confetti({
         particleCount: 45,
         spread: 75,
@@ -60,7 +62,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         colors: ['#a855f7', '#c084fc', '#f59e0b', '#38bdf8'],
         disableForReducedMotion: true,
       });
-    } else if (actionType === 'tangkap') {
+    } else if (normAction === 'TANGKAP') {
       confetti({
         particleCount: 35,
         spread: 65,
@@ -70,24 +72,28 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
       });
     }
 
-    // Dismiss overlay after 3.0s so user can enjoy full animation
+    // Dismiss overlay after 2.0s max or instant tap-to-skip
     const timer = setTimeout(() => {
       onComplete();
-    }, 3000);
-
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [actionType, onComplete]);
 
   if (!actionType) return null;
 
+  const normAction = String(actionType).toUpperCase();
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md pointer-events-none overflow-hidden font-sans">
+      <div
+        onClick={onComplete}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md cursor-pointer overflow-hidden font-sans"
+      >
         {/* ========================================================================= */}
         {/* ACTION 1: 👑 MENANG BIASA (Duolingo Golden Crown Royalty) */}
         {/* ========================================================================= */}
-        {actionType === 'menang_biasa' && (
+        {normAction === 'MENANG_BIASA' && (
           <motion.div
             initial={{ scale: 0.3, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -133,7 +139,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         {/* ========================================================================= */}
         {/* ACTION 2: 🔥 KANDANG (Duolingo Intense Fire ignition) */}
         {/* ========================================================================= */}
-        {actionType === 'kandang' && (
+        {normAction === 'KANDANG' && (
           <div className="relative flex items-center justify-center max-w-md w-full">
             {/* Animated Rising Ember Particles Background */}
             <motion.div
@@ -171,7 +177,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
                   KANDANG!
                 </h3>
                 <p className="text-xs md:text-sm text-orange-200/90 font-mono mt-2">
-                  Panggil Damkar suruh padamkan {winnerName}!  3 Pemain lainnya otomatis <strong className="text-red-400">Berdiri 😭</strong>
+                  Panggil Damkar suruh padamkan {winnerName}! 3 Pemain lainnya otomatis <strong className="text-red-400">Berdiri 😭</strong>
                 </p>
               </motion.div>
             </motion.div>
@@ -181,7 +187,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         {/* ========================================================================= */}
         {/* ACTION 3: ✅ CEKI (Duolingo Elastic Success Checkmark) */}
         {/* ========================================================================= */}
-        {actionType === 'ceki' && (
+        {normAction === 'CEKI' && (
           <motion.div
             initial={{ scale: 0.3, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -228,7 +234,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         {/* ========================================================================= */}
         {/* ACTION 4: 🐐 PALANG (G.O.A.T. SPECTACULAR - ANIMASI PALING HEBOH!) */}
         {/* ========================================================================= */}
-        {actionType === 'palang' && (
+        {normAction === 'PALANG' && (
           <div className="relative flex items-center justify-center max-w-md w-full">
             {/* Fullscreen Rotating Rainbow Starburst Ray */}
             <motion.div
@@ -284,7 +290,7 @@ export const VictoryAnimationOverlay: React.FC<Props> = ({ actionType, winnerNam
         {/* ========================================================================= */}
         {/* ACTION 5: 🚓 TANGKAP (Police Siren Strobe Merah-Biru) */}
         {/* ========================================================================= */}
-        {actionType === 'tangkap' && (
+        {normAction === 'TANGKAP' && (
           <div className="relative flex items-center justify-center max-w-md w-full">
             {/* Alternating Intense Police Red & Blue Strobe Flash Overlay */}
             <motion.div

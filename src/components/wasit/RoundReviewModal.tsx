@@ -3,7 +3,7 @@
 import React from 'react';
 import { Round } from '@/types/domino';
 import { useScorerStore } from '@/store/useScorerStore';
-import { ArrowRight, Trophy, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -13,11 +13,13 @@ interface Props {
 }
 
 const ACTION_LABELS: Record<string, { label: string; icon: string; bg: string }> = {
-  menang_biasa: { label: 'MENANG BIASA', icon: '👑', bg: 'from-amber-500/20 to-yellow-500/10 border-amber-500/50' },
-  kandang: { label: 'KANDANG (CHECK)', icon: '🔥', bg: 'from-orange-500/20 to-red-500/10 border-orange-500/50' },
-  ceki: { label: 'CEKI', icon: '✅', bg: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/50' },
-  palang: { label: 'PALANG (GOAT)', icon: '🐐', bg: 'from-purple-500/20 to-fuchsia-500/10 border-purple-500/50' },
-  tangkap: { label: 'TANGKAP', icon: '🚓', bg: 'from-blue-500/20 to-red-500/10 border-blue-500/50' },
+  MENANG_BIASA: { label: 'MENANG BIASA', icon: '👑', bg: 'from-amber-500/20 to-yellow-500/10 border-amber-500/50' },
+  KANDANG: { label: 'KANDANG (CHECK)', icon: '🔥', bg: 'from-orange-500/20 to-red-500/10 border-orange-500/50' },
+  CEKI: { label: 'CEKI', icon: '✅', bg: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/50' },
+  PALANG: { label: 'PALANG (GOAT)', icon: '🐐', bg: 'from-purple-500/20 to-fuchsia-500/10 border-purple-500/50' },
+  TANGKAP: { label: 'TANGKAP', icon: '🚓', bg: 'from-blue-500/20 to-red-500/10 border-blue-500/50' },
+  ORADO_COUNT: { label: 'ORADO COUNT', icon: '🎲', bg: 'from-cyan-500/20 to-blue-500/10 border-cyan-500/50' },
+  DENDA_POIN: { label: 'DENDA WASIT', icon: '🚨', bg: 'from-rose-500/20 to-red-500/10 border-rose-500/50' },
 };
 
 const SEAT_THEMES = [
@@ -32,7 +34,8 @@ export const RoundReviewModal: React.FC<Props> = ({ isOpen, round, onClose }) =>
 
   if (!isOpen || !round) return null;
 
-  const actionInfo = ACTION_LABELS[round.actionType] || { label: round.actionType, icon: '🏆', bg: 'from-cyan-500/20 to-blue-500/10 border-cyan-500/50' };
+  const normAction = String(round.actionType).toUpperCase();
+  const actionInfo = ACTION_LABELS[normAction] || { label: round.actionType, icon: '🏆', bg: 'from-cyan-500/20 to-blue-500/10 border-cyan-500/50' };
   const winner = match.players.find((p) => p.id === round.winnerPlayerId);
 
   return (
@@ -53,7 +56,7 @@ export const RoundReviewModal: React.FC<Props> = ({ isOpen, round, onClose }) =>
 
             <h2 className="text-2xl font-extrabold text-white font-sans tracking-wide flex items-center justify-center gap-2">
               <span>{actionInfo.icon}</span>
-              <span>{winner?.name}</span>
+              <span>{winner?.name || 'Pemain'}</span>
             </h2>
 
             <p className="text-xs text-slate-400 font-mono mt-1">
@@ -68,11 +71,12 @@ export const RoundReviewModal: React.FC<Props> = ({ isOpen, round, onClose }) =>
               const theme = SEAT_THEMES[player.seatNumber - 1] || SEAT_THEMES[0];
               const isWinner = player.id === round.winnerPlayerId;
               const isVictim = player.id === round.victimPlayerId;
+              const normStatus = String(playerScore?.status || '').toUpperCase();
 
               let statusLabel = '🪑 Duduk';
               if (isWinner) statusLabel = `👑 Menang (${actionInfo.label})`;
-              else if (isVictim) statusLabel = '💀 Ditangkap';
-              else if (playerScore?.status === 'berdiri') statusLabel = '😭 Berdiri';
+              else if (isVictim || normStatus === 'DITANGKAP') statusLabel = '💀 Ditangkap';
+              else if (normStatus === 'BERDIRI') statusLabel = '😭 Berdiri';
 
               return (
                 <div

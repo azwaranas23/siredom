@@ -7,9 +7,6 @@ async function main() {
   console.log('🌱 Starting SIREDOM Comprehensive Database Seeding...');
 
   // 1. Clean existing records in relational order
-  await prisma.roundScore.deleteMany({});
-  await prisma.round.deleteMany({});
-  await prisma.player.deleteMany({});
   await prisma.matchSession.deleteMany({});
   await prisma.tableMaster.deleteMany({});
   await prisma.user.deleteMany({});
@@ -70,6 +67,13 @@ async function main() {
   });
   console.log(`✅ Master Table created: ${table1.tableName} (PIN: ${table1.pinCode})`);
 
+  const initialPlayers = [
+    { id: `p-seed-1`, seatNumber: 1, name: 'Maman', teamIdentifier: 'NONE', currentScore: 0, totalScore: 0 },
+    { id: `p-seed-2`, seatNumber: 2, name: 'Topati', teamIdentifier: 'NONE', currentScore: 0, totalScore: 0 },
+    { id: `p-seed-3`, seatNumber: 3, name: 'Fatir', teamIdentifier: 'NONE', currentScore: 0, totalScore: 0 },
+    { id: `p-seed-4`, seatNumber: 4, name: 'Yusril', teamIdentifier: 'NONE', currentScore: 0, totalScore: 0 },
+  ];
+
   // 6. Create Initial Active Match Session for Table #1
   const initialMatch = await prisma.matchSession.create({
     data: {
@@ -86,26 +90,17 @@ async function main() {
         palang: 4,
         tangkap: 3,
       },
-      players: {
-        create: [
-          { seatNumber: 1, name: 'Maman', currentScore: 0 },
-          { seatNumber: 2, name: 'Topati', currentScore: 0 },
-          { seatNumber: 3, name: 'Fatir', currentScore: 0 },
-          { seatNumber: 4, name: 'Yusril', currentScore: 0 },
-        ],
-      },
-    },
-    include: {
-      players: true,
+      playersData: initialPlayers as any,
+      roundsHistory: [] as any,
     },
   });
 
   console.log(`🎮 Initial Match Session created for ${table1.tableName} with 4 players:`);
-  initialMatch.players.forEach((p) => {
+  initialPlayers.forEach((p) => {
     console.log(`   - Seat ${p.seatNumber}: ${p.name} (Score: ${p.currentScore})`);
   });
 
-  console.log('🎉 Full relational database seeding completed successfully!');
+  console.log('🎉 Full JSON Document-Relational database seeding completed successfully!');
 }
 
 main()

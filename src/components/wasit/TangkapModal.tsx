@@ -3,7 +3,7 @@
 import React from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { ActionType, Round } from '@/types/domino';
-import { ArrowRight, Skull } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const SEAT_DOT_COLORS = [
   'bg-rose-500',   // Seat 1
@@ -27,18 +27,17 @@ export const TangkapModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
   const winner = match.players.find((p) => p.id === selectedWinnerId);
   const candidateVictims = match.players.filter((p) => p.id !== selectedWinnerId);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selectedVictimId) return;
     selectTangkapVictim(selectedVictimId);
     const winnerName = winner?.name || '';
-    const actionType = selectedAction || 'tangkap';
-    const committed = commitCurrentRound();
+    const actionType = selectedAction || 'TANGKAP';
+    const committed = await commitCurrentRound();
     if (committed) {
       onSuccess(committed, actionType, winnerName);
     }
     onClose();
   };
-
 
   return (
     <>
@@ -73,10 +72,11 @@ export const TangkapModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
               <button
                 key={player.id}
                 onClick={() => setSelectedVictimId(player.id)}
-                className={`w-full bg-slate-900/90 border rounded-xl p-2.5 px-4 flex items-center justify-between shadow-sm transition-all text-left cursor-pointer ${isSelected
+                className={`w-full bg-slate-900/90 border rounded-xl p-2.5 px-4 flex items-center justify-between shadow-sm transition-all text-left cursor-pointer ${
+                  isSelected
                     ? 'border-2 border-rose-500 bg-[#2a1318] ring-2 ring-rose-500/30 scale-[1.005]'
                     : 'border-slate-800/80 hover:bg-slate-800/60'
-                  }`}
+                }`}
               >
                 <div className="flex items-center gap-2.5">
                   <span className={`w-3 h-3 rounded-full ${dotColor} shadow-sm`} />
@@ -86,10 +86,11 @@ export const TangkapModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
                 </div>
 
                 <span
-                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold flex items-center gap-1 ${isSelected
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold flex items-center gap-1 ${
+                    isSelected
                       ? 'bg-rose-950 text-rose-300 border-rose-700'
                       : 'bg-slate-950 text-slate-400 border-slate-800'
-                    }`}
+                  }`}
                 >
                   💀 DITANGKAP (-3)
                 </span>

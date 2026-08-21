@@ -16,7 +16,7 @@ export async function GET() {
         prisma.matchSession.findMany({
           orderBy: { updatedAt: 'desc' },
           take: 5,
-          include: { tenant: true, table: true, rounds: true },
+          include: { tenant: true, table: true },
         }),
         prisma.user.findMany({
           orderBy: { createdAt: 'desc' },
@@ -49,12 +49,13 @@ export async function GET() {
 
     // Matches Logs
     recentMatches.forEach((m) => {
+      const roundsHistory: any[] = Array.isArray(m.roundsHistory) ? (m.roundsHistory as any[]) : [];
       logs.push({
         id: `match-${m.id}`,
         timestamp: m.updatedAt.toISOString(),
         level: 'SUCCESS',
         service: 'Live Engine Scoring',
-        message: `Sesi Pertandingan Meja #${m.tableNumber} (${m.tenant?.name || 'Tenant'}) aktif dengan ${m.rounds.length} Ronde tercatat.`,
+        message: `Sesi Pertandingan Meja #${m.tableNumber} (${m.tenant?.name || 'Tenant'}) aktif dengan ${roundsHistory.length} Ronde tercatat.`,
       });
     });
 
