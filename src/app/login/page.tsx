@@ -46,7 +46,7 @@ export default function LoginPage() {
 
       if (res.success && res.role) {
         setAuth(true, res.role as any, res.tenantCode, res.tableNumber);
-        router.push('/wasit/live');
+        router.push(`/play/live/${res.tableNumber || 1}`);
       } else {
         setErrorMsg(res.error || 'PIN Wasit tidak valid!');
       }

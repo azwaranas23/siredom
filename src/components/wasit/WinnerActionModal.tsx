@@ -25,11 +25,13 @@ export const WinnerActionModal: React.FC<Props> = ({ isOpen, onClose, winnerPlay
 
   if (!isOpen || !winnerPlayerId) return null;
 
-  const winner = match.players.find((p) => p.id === winnerPlayerId);
+  const winner = match.players.find(
+    (p) => p.id === winnerPlayerId || p.seatNumber === Number(winnerPlayerId)
+  );
   if (!winner) return null;
 
   const handleActionClick = (actionType: ActionType) => {
-    selectWinnerAndAction(winnerPlayerId, actionType);
+    selectWinnerAndAction(winner.id, actionType);
   };
 
   return (

@@ -142,7 +142,7 @@ export default function AdminDashboardPage() {
 
   const handleEnterWasitTable = (tableNum: number) => {
     setAuth(true, 'wasit', tenantCode, tableNum);
-    router.push('/wasit/live');
+    router.push(`/play/live/${tableNum}`);
   };
 
   return (

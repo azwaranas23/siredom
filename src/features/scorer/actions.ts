@@ -247,10 +247,55 @@ export async function rollbackRoundAction(matchId: string) {
   }
 }
 
-export async function setupMatchAction(input: SetupMatchInput) {
+export interface SetupMatchInput {
+  matchId?: string;
+  tableId?: string;
+  tenantCode?: string;
+  tableNumber?: number;
+  rulesetMode?: RulesetMode;
+  matchCategory?: MatchCategory;
+  matchMode?: 'rounds' | 'points' | 'ROUNDS' | 'POINTS';
+  targetType?: string;
+  targetValue?: number;
+  pointsConfig?: any;
+  rulesConfig?: any;
+  oradoConfig?: any;
+  players: { seatNumber: 1 | 2 | 3 | 4; name: string }[];
+}
+
+export async function getActiveMatchByTableId(tableId: string) {
+  try {
+    let table = await prisma.tableMaster.findFirst({
+      where: {
+        OR: [
+          { id: tableId },
+          { tableNumber: isNaN(Number(tableId)) ? undefined : Number(tableId) }
+        ].filter(Boolean) as any
+      }
+    });
+
+    if (!table) return null;
+
+    const activeMatch = await prisma.matchSession.findFirst({
+      where: {
+        tableId: table.id,
+        status: 'IN_PROGRESS'
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return activeMatch;
+  } catch (error) {
+    console.error('Failed to fetch active match by tableId:', error);
+    return null;
+  }
+}
+
+export async function setupMatchSessionAction(input: SetupMatchInput) {
   try {
     const {
       matchId,
+      tableId,
       tenantCode = 'TAB-SLOWBAR',
       tableNumber = 1,
       rulesetMode = 'CASUAL',
@@ -264,29 +309,42 @@ export async function setupMatchAction(input: SetupMatchInput) {
       players,
     } = input;
 
-    // Find tenant & table
+    // Find tenant
     const tenant = await prisma.tenant.findFirst({
       where: { code: { equals: tenantCode, mode: 'insensitive' } },
     });
 
     if (!tenant) {
-      return { status: 'error', message: `Tenant with code ${tenantCode} not found` };
+      return { success: false, status: 'error', message: `Tenant with code ${tenantCode} not found` };
     }
 
+    const effectiveTableNumber = tableNumber || (tableId && !isNaN(Number(tableId)) ? Number(tableId) : 1);
+
+    // Look up table by tableId or tableNumber
     let table = await prisma.tableMaster.findFirst({
-      where: { tenantId: tenant.id, tableNumber },
+      where: {
+        tenantId: tenant.id,
+        OR: [
+          ...(tableId ? [{ id: tableId }] : []),
+          { tableNumber: effectiveTableNumber }
+        ]
+      },
     });
 
     if (!table) {
       table = await prisma.tableMaster.create({
         data: {
           tenantId: tenant.id,
-          tableNumber,
-          tableName: `Meja 0${tableNumber}`,
+          tableNumber: effectiveTableNumber,
+          tableName: `Meja 0${effectiveTableNumber}`,
           pinCode: '1234',
+          status: 'IN_MATCH',
+          isLocked: true,
         },
       });
     }
+
+    const targetTableId = tableId || table.id;
 
     const formattedPlayers = players.map((p) => ({
       id: `p-${Date.now()}-${p.seatNumber}`,
@@ -299,39 +357,40 @@ export async function setupMatchAction(input: SetupMatchInput) {
 
     const normMatchMode = String(matchMode).toUpperCase() as 'ROUNDS' | 'POINTS';
 
-    let matchSession;
-    if (matchId && matchId !== 'empty') {
-      matchSession = await prisma.matchSession.update({
-        where: { id: matchId },
+    // Execute atomic transaction for TableMaster status & MatchSession creation
+    const matchSession = await prisma.$transaction(async (tx) => {
+      // 1. Lock table master
+      await tx.tableMaster.update({
+        where: { id: table!.id },
         data: {
-          tenantId: tenant.id,
-          tableId: table.id,
-          tableNumber,
-          rulesetMode,
-          matchCategory,
-          matchMode: normMatchMode,
-          targetType,
-          targetValue,
-          currentSet: 1,
-          teamASetWins: 0,
-          teamBSetWins: 0,
-          pointsConfig: pointsConfig || undefined,
-          rulesConfig: rulesConfig || { pointsConfig, oradoConfig },
-          playersData: formattedPlayers as any,
-          roundsHistory: [] as any,
-          status: 'IN_PROGRESS',
+          status: 'IN_MATCH',
+          isLocked: true,
         },
       });
-    } else {
-      // Find existing active session or create new
-      const existing = await prisma.matchSession.findFirst({
-        where: { tenantId: tenant.id, tableNumber, status: 'IN_PROGRESS' },
-      });
 
-      if (existing) {
-        matchSession = await prisma.matchSession.update({
-          where: { id: existing.id },
+      // 2. Find existing match session by matchId or active session on table
+      let existingSession = null;
+      if (matchId && matchId !== 'empty') {
+        existingSession = await tx.matchSession.findUnique({
+          where: { id: matchId },
+        });
+      }
+
+      if (!existingSession) {
+        existingSession = await tx.matchSession.findFirst({
+          where: { tableId: table!.id, status: 'IN_PROGRESS' },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+
+      let session;
+      if (existingSession) {
+        session = await tx.matchSession.update({
+          where: { id: existingSession.id },
           data: {
+            tenantId: tenant.id,
+            tableId: table!.id,
+            tableNumber: table!.tableNumber,
             rulesetMode,
             matchCategory,
             matchMode: normMatchMode,
@@ -348,11 +407,11 @@ export async function setupMatchAction(input: SetupMatchInput) {
           },
         });
       } else {
-        matchSession = await prisma.matchSession.create({
+        session = await tx.matchSession.create({
           data: {
             tenantId: tenant.id,
-            tableId: table.id,
-            tableNumber,
+            tableId: table!.id,
+            tableNumber: table!.tableNumber,
             rulesetMode,
             matchCategory,
             matchMode: normMatchMode,
@@ -369,7 +428,9 @@ export async function setupMatchAction(input: SetupMatchInput) {
           },
         });
       }
-    }
+
+      return session;
+    });
 
     const responseData = {
       ...matchSession,
@@ -377,9 +438,19 @@ export async function setupMatchAction(input: SetupMatchInput) {
       rounds: [],
     };
 
-    return { status: 'success', data: responseData };
+    return {
+      success: true,
+      status: 'success',
+      data: responseData,
+      redirectUrl: `/play/live/${targetTableId}`,
+    };
   } catch (error: any) {
-    console.error('Failed in setupMatchAction:', error);
-    return { status: 'error', message: error.message || 'Gagal melakukan setup match' };
+    console.error('Failed in setupMatchSessionAction:', error);
+    return { success: false, status: 'error', message: error.message || 'Gagal melakukan setup match' };
   }
 }
+
+export async function setupMatchAction(input: SetupMatchInput) {
+  return setupMatchSessionAction(input);
+}
+

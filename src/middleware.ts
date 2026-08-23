@@ -10,20 +10,15 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api') ||
     pathname.includes('.') ||
     pathname === '/login' ||
-    pathname === '/'
+    pathname === '/' ||
+    pathname.startsWith('/play')
   ) {
     return NextResponse.next();
   }
 
-  // Handle legacy /play/* route redirects to /wasit/*
-  if (pathname.startsWith('/play/live')) {
-    return NextResponse.redirect(new URL('/wasit/live', request.url));
-  }
-  if (pathname.startsWith('/play/setup')) {
-    return NextResponse.redirect(new URL('/wasit/setup', request.url));
-  }
-  if (pathname.startsWith('/play/audit')) {
-    return NextResponse.redirect(new URL('/wasit/audit', request.url));
+  // Redirect legacy /wasit routes to /play
+  if (pathname.startsWith('/wasit')) {
+    return NextResponse.redirect(new URL('/play', request.url));
   }
 
   return NextResponse.next();

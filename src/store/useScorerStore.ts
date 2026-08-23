@@ -435,7 +435,7 @@ export const useScorerStore = create<ScorerStore>()(
           selectedAction: null,
           selectedVictimId: null,
           manualStatuses: {},
-          fsmState: 'CONFIRMATION',
+          fsmState: 'ACTION_SELECTED',
         });
       },
 
@@ -778,24 +778,16 @@ export const useScorerStore = create<ScorerStore>()(
 
       selectWinnerAndAction: (winnerId, action) => {
         const { match } = get();
-        const otherPlayers = match.players.filter((p) => p.id !== winnerId);
-
-        const initialManual: Record<string, RoundStatusTag> = {};
-        otherPlayers.forEach((p) => {
-          initialManual[p.id] = 'DUDUK';
-        });
+        const otherPlayers = match.players.filter((p) => p.id !== winnerId && p.seatNumber !== Number(winnerId));
 
         const normalizedAction = (String(action).toUpperCase() as ActionType) || 'MENANG_BIASA';
 
-        if (normalizedAction === 'KANDANG') {
-          set({
-            selectedWinnerId: winnerId,
-            selectedAction: normalizedAction,
-            selectedVictimId: null,
-            manualStatuses: {},
-            fsmState: 'CONFIRMATION',
-          });
-        } else if (normalizedAction === 'TANGKAP') {
+        const initialManual: Record<string, RoundStatusTag> = {};
+        otherPlayers.forEach((p) => {
+          initialManual[p.id] = normalizedAction === 'KANDANG' ? 'BERDIRI' : 'DUDUK';
+        });
+
+        if (normalizedAction === 'TANGKAP') {
           set({
             selectedWinnerId: winnerId,
             selectedAction: normalizedAction,

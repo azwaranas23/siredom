@@ -6,11 +6,13 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const tenantCode = searchParams.get('tenantCode') || 'TAB-SLOWBAR';
-    const tableNumber = Number(searchParams.get('tableNumber')) || 1;
+    const tableIdParam = searchParams.get('tableId');
+    const tableNumberParam = searchParams.get('tableNumber');
+    const tableNumber = Number(tableNumberParam) || 1;
 
     // Try finding tenant by code
-    let tenant = await prisma.tenant.findUnique({
-      where: { code: tenantCode.toUpperCase() },
+    let tenant = await prisma.tenant.findFirst({
+      where: { code: { equals: tenantCode, mode: 'insensitive' } },
     });
 
     // Fallback: try finding first active tenant if code doesn't match
@@ -24,14 +26,18 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: 'error', message: 'Tenant tidak ditemukan' }, { status: 404 });
     }
 
-    let table = await prisma.tableMaster.findFirst({
-      where: { tenantId: tenant.id, tableNumber },
+    // Fetch all master tables for tenant
+    const masterTables = await prisma.tableMaster.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { tableNumber: 'asc' },
     });
 
+    let table = null;
+    if (tableIdParam) {
+      table = masterTables.find((t) => t.id === tableIdParam || t.tableNumber === Number(tableIdParam));
+    }
     if (!table) {
-      table = await prisma.tableMaster.findFirst({
-        where: { tenantId: tenant.id },
-      });
+      table = masterTables.find((t) => t.tableNumber === tableNumber) || masterTables[0];
     }
 
     if (!table) {
@@ -44,12 +50,14 @@ export async function GET(req: Request) {
         tableId: table.id,
         status: 'IN_PROGRESS',
       },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!match) {
       return NextResponse.json({
         status: 'success',
         data: null,
+        masterTables,
         tableInfo: {
           id: table.id,
           tableNumber: table.tableNumber,
@@ -57,7 +65,7 @@ export async function GET(req: Request) {
           isLocked: (table as any).isLocked || false,
           activeDeviceId: (table as any).activeDeviceId || null,
         },
-        message: `Belum ada sesi pertandingan aktif di Meja #${tableNumber}`,
+        message: `Belum ada sesi pertandingan aktif di Meja #${table.tableNumber}`,
       });
     }
 
@@ -70,6 +78,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       status: 'success',
       data: formattedMatch,
+      masterTables,
       tableInfo: {
         id: table.id,
         tableNumber: table.tableNumber,
