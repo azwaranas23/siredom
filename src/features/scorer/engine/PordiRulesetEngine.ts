@@ -111,7 +111,7 @@ export class PordiRulesetEngine implements IRulesetEngine {
       });
     }
 
-    const nextRoundsCount = currentRoundsCount + 1;
+const nextRoundsCount = currentRoundsCount + 1;
     const isModeRounds = String(matchMode).toUpperCase() === 'ROUNDS';
     const isTeamCategory = matchCategory === 'TEAM_2V2';
 
@@ -123,7 +123,7 @@ export class PordiRulesetEngine implements IRulesetEngine {
 
     let isTargetReached = false;
     if (isModeRounds) {
-      isTargetReached = nextRoundsCount >= targetValue;
+      isTargetReached = currentRoundsCount >= targetValue;
     } else if (isTeamCategory) {
       const teamAScore = roundScores
         .filter((s) => s.seatNumber === 1 || s.seatNumber === 3)

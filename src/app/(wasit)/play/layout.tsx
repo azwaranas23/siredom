@@ -16,6 +16,9 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const rawTableId = (params?.tableId as string) || String(tableNumber || 1);
+  
+  // Display label: prefer numeric table number over UUID
+  const displayTableLabel = /^\d+$/.test(rawTableId) ? `Meja #${rawTableId}` : `Meja #${tableNumber || 1}`;
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -72,7 +75,7 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                {tenantCode || 'TAB-SLOWBAR'} • MEJA ID: {rawTableId}
+                {tenantCode || 'TAB-SLOWBAR'} • {displayTableLabel}
               </p>
             </div>
           </Link>

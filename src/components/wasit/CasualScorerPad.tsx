@@ -123,6 +123,14 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
     await rollbackLastRound();
   };
 
+  // KANDANG Zero-Redundancy Auto-Commit: langsung commit + animasi tanpa modal status
+  React.useEffect(() => {
+    if (fsmState === 'CONFIRMATION' && selectedAction === 'KANDANG' && selectedWinnerId) {
+      handleAutoCommit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fsmState]);
+
   // Mid-Game Target Update Handler
   const handleSaveTargetMidGame = async () => {
     const val = Number(editTargetValue) || (editMode === 'rounds' ? 10 : 50);

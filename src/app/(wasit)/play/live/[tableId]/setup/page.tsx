@@ -34,7 +34,11 @@ interface PageProps {
 export default function TableSetupPage({ params }: PageProps) {
   const { tableId } = use(params);
   const router = useRouter();
-  const { match, setMatchFromDb, tenantCode } = useScorerStore();
+  const { match, setMatchFromDb, tenantCode, tableNumber } = useScorerStore();
+
+  // Display label: prefer numeric table number; fallback to raw ID only when non-numeric
+  const displayTableId = /^\d+$/.test(tableId) ? tableId : (tableNumber ? `Meja #${tableNumber}` : 'Meja Wasit');
+  const tableLabel = displayTableId ? `Meja #${displayTableId}` : 'Meja Wasit';
 
   const [rulesetMode, setRulesetMode] = useState<RulesetMode>(match.rulesetMode || 'CASUAL');
   const [matchCategory, setMatchCategory] = useState<MatchCategory>(match.matchCategory || 'SINGLE_1V1V1V1');
@@ -60,6 +64,7 @@ export default function TableSetupPage({ params }: PageProps) {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   // Handle Cascading Logic when RulesetMode or MatchCategory changes
   useEffect(() => {
@@ -104,6 +109,9 @@ export default function TableSetupPage({ params }: PageProps) {
     e.preventDefault();
     setIsSubmitting(true);
 
+    // Reset error handling if any
+    setSubmitError('');
+    
     let finalTargetVal = Number(targetValue);
     if (rulesetMode === 'PB_ORADO') {
       finalTargetVal = 101;
@@ -118,26 +126,33 @@ export default function TableSetupPage({ params }: PageProps) {
       name: p.name.trim() || `Pemain ${p.seatNumber}`,
     }));
 
-    const result = await setupMatchSessionAction({
-      tableId,
-      matchId: match.id,
-      tenantCode: tenantCode || 'TAB-SLOWBAR',
-      rulesetMode,
-      matchCategory,
-      matchMode,
-      targetType,
-      targetValue: finalTargetVal,
-      pointsConfig,
-      rulesConfig: { pointsConfig, oradoConfig },
-      oradoConfig,
-      players: formattedPlayers,
-    });
+    try {
+      const result = await setupMatchSessionAction({
+        tableId,
+        matchId: match.id === 'empty' ? undefined : match.id,
+        tenantCode: tenantCode || 'TAB-SLOWBAR',
+        rulesetMode,
+        matchCategory,
+        matchMode,
+        targetType,
+        targetValue: finalTargetVal,
+        pointsConfig,
+        rulesConfig: { pointsConfig, oradoConfig },
+        oradoConfig,
+        players: formattedPlayers,
+      });
 
-    setIsSubmitting(false);
+      setIsSubmitting(false);
 
-    if (result.success && result.data) {
-      setMatchFromDb(result.data);
-      router.push(`/play/live/${tableId}`);
+      if (result.success && result.data) {
+        setMatchFromDb(result.data);
+        router.push(`/play/live/${tableId}`);
+      } else {
+        setSubmitError(result.message || 'Gagal melakukan setup. Silakan coba lagi.');
+      }
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setSubmitError('Terjadi kesalahan sistem: ' + (err.message || 'Unknown'));
     }
   };
 
@@ -148,13 +163,20 @@ export default function TableSetupPage({ params }: PageProps) {
         <div>
           <h1 className="text-xl font-extrabold text-white flex items-center gap-2 font-display">
             <Users className="w-6 h-6 text-cyan-400" />
-            Konfigurasi Pertandingan Wasit Meja ID: {tableId}
+            Konfigurasi Pertandingan {tableLabel}
           </h1>
           <p className="text-xs text-slate-400 font-mono mt-1">
             Setup Mode Aturan, Kategori Match, Formasi Pemain & Target Nilai
           </p>
         </div>
       </div>
+
+      {submitError && (
+        <div className="bg-rose-950/40 border border-rose-800 text-rose-300 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 animate-shake">
+          <Shield className="w-5 h-5 text-rose-500 shrink-0" />
+          <p>{submitError}</p>
+        </div>
+      )}
 
       {/* STEP 1: RULESET SELECTION */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 font-mono">

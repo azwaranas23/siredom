@@ -795,6 +795,17 @@ export const useScorerStore = create<ScorerStore>()(
             manualStatuses: {},
             fsmState: 'MODAL_TANGKAP_VICTIM',
           });
+        } else if (normalizedAction === 'KANDANG') {
+          // Zero-Redundancy Auto-Commit: 3 pemain lain otomatis BERDIRI,
+          // langsung ke CONFIRMATION tanpa modal status manual.
+          // Scorer pad mendeteksi state ini & memicu commit + animasi kemenangan.
+          set({
+            selectedWinnerId: winnerId,
+            selectedAction: normalizedAction,
+            selectedVictimId: null,
+            manualStatuses: initialManual,
+            fsmState: 'CONFIRMATION',
+          });
         } else {
           set({
             selectedWinnerId: winnerId,

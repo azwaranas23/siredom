@@ -46,6 +46,7 @@ export interface CalculationResult {
   winType: string;
   isPenalty: boolean;
   isMatchComplete: boolean;
+  setJustWon?: boolean; // true when a team reaches 101 but match not over yet
   newTargetValue?: number;
   currentSet?: number;
   teamASetWins?: number;

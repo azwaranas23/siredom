@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { ActionType } from '@/types/domino';
 import { TeamScoreHeader } from '@/components/wasit/TeamScoreHeader';
@@ -35,7 +35,9 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     match,
     fsmState,
     selectedWinnerId,
+    selectedAction,
     selectWinnerPlayer,
+    commitCurrentRound,
     resetFSM,
     rollbackLastRound,
     applyFastPenalty,
@@ -86,6 +88,26 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     setToastMessage(null);
     await rollbackLastRound();
   };
+
+  // KANDANG Zero-Redundancy Auto-Commit: langsung commit + animasi tanpa modal status
+  useEffect(() => {
+    if (fsmState === 'CONFIRMATION' && selectedAction === 'KANDANG' && selectedWinnerId) {
+      const roundNumBefore = match.rounds.length + 1;
+      const winnerObj = match.players.find((p) => p.id === selectedWinnerId);
+      const winnerName = winnerObj?.name || 'Pemain';
+
+      commitCurrentRound().then((committedRound) => {
+        if (committedRound) {
+          triggerUndoToast(roundNumBefore, winnerName);
+          setVictoryOverlayData({
+            actionType: committedRound.actionType,
+            winnerName,
+          });
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fsmState]);
 
   return (
     <div className="h-full flex-1 flex flex-col min-h-0 overflow-hidden font-sans select-none relative justify-between">

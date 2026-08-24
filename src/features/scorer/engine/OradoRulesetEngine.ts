@@ -110,8 +110,13 @@ export class OradoRulesetEngine implements IRulesetEngine {
       if (setWinner === 'TEAM_A') teamASetWins += 1;
       if (setWinner === 'TEAM_B') teamBSetWins += 1;
 
+      // Only complete the match when a team wins 2 sets OR we've reached the 3rd set
+      // Otherwise, request confirmation to continue to next set
       if (teamASetWins >= 2 || teamBSetWins >= 2 || currentSet >= 3) {
         isMatchComplete = true;
+      } else {
+        // Move to next set; UI will prompt for confirmation to continue
+        currentSet += 1;
       }
     }
 
@@ -130,6 +135,7 @@ export class OradoRulesetEngine implements IRulesetEngine {
       winType: winTypeStr,
       isPenalty: Boolean(isPenalty || actionType === 'DENDA_POIN'),
       isMatchComplete,
+      setJustWon: !isApollo && setWinner !== null,
       currentSet,
       teamASetWins,
       teamBSetWins,

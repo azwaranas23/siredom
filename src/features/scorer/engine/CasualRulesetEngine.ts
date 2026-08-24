@@ -123,7 +123,7 @@ export class CasualRulesetEngine implements IRulesetEngine {
 
     let isTargetReached = false;
     if (isModeRounds) {
-      isTargetReached = nextRoundsCount >= targetValue;
+      isTargetReached = currentRoundsCount >= targetValue;
     } else if (isTeamCategory) {
       const teamAScore = roundScores
         .filter((s) => s.seatNumber === 1 || s.seatNumber === 3)
