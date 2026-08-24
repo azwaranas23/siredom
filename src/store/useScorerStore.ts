@@ -159,7 +159,7 @@ interface ScorerStore {
   updateRoundInline: (roundId: string, updatedRound: Partial<Round>) => void;
   resetMatch: () => void;
   startNextSet: () => void;
-  
+
   // Helper Selectors
   getTeamAScore: (targetTableNum?: number) => number;
   getTeamBScore: (targetTableNum?: number) => number;
@@ -169,7 +169,7 @@ interface ScorerStore {
   getWinstreak: (playerId: string, targetTableNum?: number) => number;
   getLast5RoundHistory: (playerId: string, targetTableNum?: number) => RoundHistoryIcon[];
   getFunAwards: (targetTableNum?: number) => FunAwards;
-  getTelemetryData: (targetTableNum?: number) => { round: string; [playerName: string]: number | string }[];
+  getTelemetryData: (targetTableNum?: number) => { round: string;[playerName: string]: number | string }[];
 }
 
 export const useScorerStore = create<ScorerStore>()(
@@ -1206,9 +1206,9 @@ export const useScorerStore = create<ScorerStore>()(
 
       getTelemetryData: (targetTableNum?: number) => {
         const match = targetTableNum ? get().getTableMatch(targetTableNum) : get().match;
-        const telemetry: { round: string; [key: string]: number | string }[] = [];
+        const telemetry: { round: string;[key: string]: number | string }[] = [];
 
-        const round0: { round: string; [key: string]: number | string } = { round: 'R0' };
+        const round0: { round: string;[key: string]: number | string } = { round: 'R0' };
         match.players.forEach((p) => {
           round0[p.name] = 0;
         });
@@ -1220,7 +1220,7 @@ export const useScorerStore = create<ScorerStore>()(
         });
 
         match.rounds.forEach((round) => {
-          const entry: { round: string; [key: string]: number | string } = {
+          const entry: { round: string;[key: string]: number | string } = {
             round: `R${round.roundNumber}`,
           };
 
