@@ -48,18 +48,24 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
   const handleLogout = async () => {
     const deviceId = getOrCreateDeviceId();
     const isUuid = !/^\d+$/.test(rawTableId);
+    const numericTable = Number(tableNumber);
 
-    try {
-      if (deviceId) {
-        await releaseTableSessionAction({
-          tableId: isUuid ? rawTableId : undefined,
-          tenantCode: tenantCode || undefined,
-          tableNumber: Number(tableNumber) || 1,
-          deviceId,
-        });
+    // Ref meja valid: UUID dari rute, ATAU pasangan tenant+nomor dari store.
+    // Tanpa ref yang valid, unlock dilewati (jangan menebak-nebak Meja #1).
+    const tableRef = isUuid
+      ? { tableId: rawTableId }
+      : tenantCode && Number.isFinite(numericTable) && numericTable > 0
+      ? { tenantCode, tableNumber: numericTable }
+      : null;
+
+    if (deviceId && tableRef) {
+      const res = await releaseTableSessionAction({ ...tableRef, deviceId });
+      if (res.status !== 'success') {
+        // Jangan biarkan gagal senyap: wasit harus tahu meja masih terkunci.
+        window.alert(`Meja belum dilepas: ${res.message}\nAnda tetap keluar; minta panitia membuka sesi bila perlu.`);
       }
-    } catch (err) {
-      console.error('Gagal melepas kunci meja saat logout:', err);
+    } else {
+      console.warn('Logout tanpa unlock: deviceId/ref meja tidak tersedia.');
     }
 
     try {

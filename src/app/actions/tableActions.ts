@@ -45,22 +45,22 @@ export async function releaseTableSessionAction(input: {
       return { status: 'error', message: 'deviceId dan (tableId | tenantCode+tableNumber) wajib diisi' };
     }
 
-    let tableId = input.tableId;
-    if (!tableId) {
-      const table = await prisma.tableMaster.findFirst({
-        where: {
-          tableNumber: Number(input.tableNumber),
-          tenant: { code: String(input.tenantCode).trim().toUpperCase() },
-        },
-        select: { id: true },
-      });
-      if (!table) return { status: 'error', message: 'Meja tidak ditemukan' };
-      tableId = table.id;
-    }
+    // Resolusi meja + tenantId (AGENTS.md §1.5: setiap query Prisma wajib scoping tenant)
+    const table = await prisma.tableMaster.findFirst({
+      where: input.tableId
+        ? { id: input.tableId }
+        : {
+            tableNumber: Number(input.tableNumber),
+            tenant: { code: String(input.tenantCode).trim().toUpperCase() },
+          },
+      select: { id: true, tenantId: true },
+    });
+    if (!table) return { status: 'error', message: 'Meja tidak ditemukan' };
 
     const released = await prisma.tableMaster.updateMany({
       where: {
-        id: tableId,
+        id: table.id,
+        tenantId: table.tenantId,
         isLocked: true,
         activeDeviceId: deviceId,
       },
@@ -76,9 +76,10 @@ export async function releaseTableSessionAction(input: {
     }
 
     return { status: 'success' };
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal melepas sesi meja';
     console.error('releaseTableSessionAction Error:', error);
-    return { status: 'error', message: error.message || 'Gagal melepas sesi meja' };
+    return { status: 'error', message };
   }
 }
 

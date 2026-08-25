@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { setupMatchAction, commitRoundAction, rollbackRoundAction } from '@/features/scorer/actions';
+import { releaseTableSessionAction } from '@/app/actions/tableActions';
 import { PlayersDataDocument, PublicTableInfo, RoundsHistoryDocument } from '@/types/domino';
 
 export async function GET(req: Request) {
@@ -141,24 +142,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'success', data: locked });
     }
 
-    // Action 2: Unlock Table Session (hanya perangkat pemilik sesi yang boleh membuka)
+    // Action 2: Unlock Table Session — delegasi ke releaseTableSessionAction
+    // (satu sumber kebenaran semantik unlock; devlog/0009 review)
     if (action === 'UNLOCK_TABLE' && tableId) {
-      const release = await prisma.tableMaster.updateMany({
-        where: {
-          id: tableId,
-          ...(deviceId ? { OR: [{ activeDeviceId: deviceId }, { activeDeviceId: null }] } : {}),
-        },
-        data: {
-          isLocked: false,
-          activeDeviceId: null,
-        },
-      });
+      const res = await releaseTableSessionAction({ tableId, deviceId });
 
-      if (release.count === 0) {
-        return NextResponse.json(
-          { status: 'error', message: 'Sesi lock bukan milik perangkat ini' },
-          { status: 409 }
-        );
+      if (res.status !== 'success') {
+        return NextResponse.json({ status: 'error', message: res.message }, { status: 409 });
       }
 
       return NextResponse.json({ status: 'success', message: 'Session lock berhasil dibuka' });
