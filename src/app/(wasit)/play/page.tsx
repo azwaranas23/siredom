@@ -119,7 +119,7 @@ export default function PlayPortalPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col p-4 md:p-8 font-sans selection:bg-cyan-500 selection:text-slate-950">
       {/* Top Header Logo */}
-      <div className="max-w-4xl mx-auto w-full flex items-center justify-between border-b border-slate-800 pb-4">
+      <div className="max-w-4xl mx-auto w-full flex items-center justify-between border-b border-slate-800 pb-3 md:pb-4 pt-1 md:pt-2">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-10 h-10 rounded-2xl bg-cyan-950 border border-cyan-800 flex items-center justify-center font-black text-cyan-400 text-2xl shadow-inner shrink-0">
             <Dices className="w-5 h-5 md:w-6 md:h-6" />
@@ -140,7 +140,7 @@ export default function PlayPortalPage() {
       </div>
 
       {/* Tenant Code Input */}
-      <div className="max-w-4xl mx-auto w-full md:w-full mb-4">
+      <div className="max-w-4xl mx-auto w-full md:w-full mt-4 md:mt-6 mb-5 md:mb-6">
         <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">KODE PENYELENGGARA</label>
         <div className="flex gap-2">
           <input
@@ -170,7 +170,7 @@ export default function PlayPortalPage() {
       </div>
 
       {/* Main Content Area - Stacked on mobile, side-by-side on tablet/desktop */}
-      <div className="max-w-4xl mx-auto w-full md:w-full my-auto py-4 md:py-6 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 items-start">
+      <div className="max-w-4xl mx-auto w-full md:w-full mt-1 md:mt-2 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 items-start">
         {/* Left Column: Table Selection Grid */}
         <div className="lg:col-span-7 space-y-3 md:space-y-4">
           <div className="flex items-center justify-between font-mono">
