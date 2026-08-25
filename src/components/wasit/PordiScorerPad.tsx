@@ -54,7 +54,6 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
   const [toastTimer, setToastTimer] = useState<NodeJS.Timeout | null>(null);
 
   const [isPenaltyModalOpen, setIsPenaltyModalOpen] = useState(false);
-  const [quickPenaltyPlayerId, setQuickPenaltyPlayerId] = useState<string | null>(null);
 
   const [victoryOverlayData, setVictoryOverlayData] = useState<{
     actionType: ActionType;
@@ -194,7 +193,6 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
         {match.players.map((player) => {
           const seatInfo = getSeatInfo(player.seatNumber);
           const isSelected = selectedWinnerId === player.id;
-          const isQuickPenaltyTarget = quickPenaltyPlayerId === player.id;
           const historyList = getLast5RoundHistory(player.id);
 
           return (
@@ -217,73 +215,17 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
                     {player.name}
                   </span>
                 </div>
-
-                {/* PORDI Quick Penalty Trigger per Seat */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setQuickPenaltyPlayerId(isQuickPenaltyTarget ? null : player.id);
-                  }}
-                  className={`px-2.5 py-1 rounded-xl font-mono text-xs font-bold border transition-colors ${
-                    isQuickPenaltyTarget
-                      ? 'bg-rose-600 text-white border-rose-500'
-                      : 'bg-rose-950/60 text-rose-300 border-rose-900 hover:bg-rose-900'
-                  }`}
-                >
-                  ⚠ DENDA
-                </button>
               </div>
 
-              {/* Quick Penalty Floating Buttons panel when toggled */}
-              {isQuickPenaltyTarget ? (
-                <div
-                  className="my-auto bg-slate-950/90 border border-rose-800/80 rounded-2xl p-3 space-y-2 animate-in zoom-in-95"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="text-xs font-extrabold text-rose-400 uppercase font-mono text-center">
-                    PENALTY DENDA CEPAT WASIT
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 font-mono">
-                    <button
-                      onClick={() => {
-                        handleApplyPenalty(player.id, 1);
-                        setQuickPenaltyPlayerId(null);
-                      }}
-                      className="p-2 bg-amber-950 hover:bg-amber-900 border border-amber-700 rounded-xl text-amber-300 font-extrabold text-[11px]"
-                    >
-                      +1 Ringan
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleApplyPenalty(player.id, 3);
-                        setQuickPenaltyPlayerId(null);
-                      }}
-                      className="p-2 bg-orange-950 hover:bg-orange-900 border border-orange-700 rounded-xl text-orange-300 font-extrabold text-[11px]"
-                    >
-                      +3 Turun 2
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleApplyPenalty(player.id, 4);
-                        setQuickPenaltyPlayerId(null);
-                      }}
-                      className="p-2 bg-rose-950 hover:bg-rose-900 border border-rose-700 rounded-xl text-rose-300 font-extrabold text-[11px]"
-                    >
-                      +4 Passed
-                    </button>
-                  </div>
+              {/* Score Display — Ticket GH#5: denda terpusat di Panel Denda navbar */}
+              <div className="text-center my-auto py-2">
+                <div className={`text-6xl sm:text-7xl md:text-8xl font-black font-mono tracking-tight drop-shadow-md ${seatInfo.scoreColor}`}>
+                  {player.currentScore}
                 </div>
-              ) : (
-                /* Score Display */
-                <div className="text-center my-auto py-2">
-                  <div className={`text-6xl sm:text-7xl md:text-8xl font-black font-mono tracking-tight drop-shadow-md ${seatInfo.scoreColor}`}>
-                    {player.currentScore}
-                  </div>
-                  <div className="text-[11px] text-amber-400 font-mono uppercase tracking-widest mt-2 font-extrabold">
-                    POIN PORDI
-                  </div>
+                <div className="text-[11px] text-amber-400 font-mono uppercase tracking-widest mt-2 font-extrabold">
+                  POIN PORDI
                 </div>
-              )}
+              </div>
 
               {/* Bottom Row: 5 Ronde History Pills (paritas dengan Casual — devlog/0006) */}
               <div className="border-t border-slate-800/80 pt-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none font-mono text-xs">
