@@ -7,7 +7,7 @@ import { useScorerStore } from '@/store/useScorerStore';
 import { releaseTableSessionAction } from '@/app/actions/tableActions';
 import { clearSessionCookieAction } from '@/app/actions/authActions';
 import { getOrCreateDeviceId } from '@/lib/device';
-import { Radio, SlidersHorizontal, FileText, History, LogOut, Maximize2, Minimize2, Menu, X, Dices } from 'lucide-react';
+import { Radio, SlidersHorizontal, FileText, History, LogOut, Maximize2, Minimize2, Menu, X, Dices, ChevronDown } from 'lucide-react';
 
 export default function PlayLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
   const { tenantCode, tableNumber, logout } = useScorerStore();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const rawTableId = (params?.tableId as string) || String(tableNumber || 1);
@@ -113,9 +114,9 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
             </div>
           </Link>
 
-          {/* Desktop Navigation Tabs */}
+          {/* Desktop Navigation — Ticket GH#9: tab primer + dropdown menu sekunder */}
           <nav className="hidden md:flex items-center gap-1.5 font-mono text-xs">
-            {wasitLinks.map((link) => {
+            {wasitLinks.slice(0, 2).map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href;
 
@@ -134,6 +135,49 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               );
             })}
+
+            {/* Dropdown MENU sekunder (Audit & Riwayat) */}
+            <div className="relative">
+              <button
+                onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                className={`px-3.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all border ${
+                  wasitLinks.slice(2).some((l) => l.href === pathname)
+                    ? 'text-cyan-300 bg-cyan-950/60 border-cyan-800'
+                    : isMoreMenuOpen
+                    ? 'bg-slate-800 text-white border-slate-600'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border-transparent'
+                }`}
+              >
+                <Menu className="w-3.5 h-3.5" /> MENU
+                <ChevronDown className={`w-3 h-3 transition-transform ${isMoreMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isMoreMenuOpen && (
+                <>
+                  {/* Klik-luar untuk menutup */}
+                  <div className="fixed inset-0 z-30" onClick={() => setIsMoreMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1.5 w-48 z-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                    {wasitLinks.slice(2).map((link) => {
+                      const Icon = link.icon;
+                      const isActive = pathname === link.href;
+                      return (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setIsMoreMenuOpen(false)}
+                          className={`w-full px-4 py-2.5 font-bold flex items-center gap-2 transition-colors ${
+                            isActive ? 'text-cyan-300 bg-cyan-950/50' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {link.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </nav>
 
           {/* Right Actions */}
