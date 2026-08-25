@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 import { PordiRulesetEngine } from '../src/features/scorer/engine/PordiRulesetEngine';
 import { CasualRulesetEngine } from '../src/features/scorer/engine/CasualRulesetEngine';
+import { OradoRulesetEngine } from '../src/features/scorer/engine/OradoRulesetEngine';
 import type { CalculationInput } from '../src/features/scorer/engine/types';
 
 let failures = 0;
@@ -431,9 +432,268 @@ async function loopE() {
   });
 }
 
+// ── Loop F: tie-break overtime PORDI (pure) ──
+async function loopF() {
+  console.log('--- Loop F: overtime tie-break ---');
+  const engine = new PordiRulesetEngine();
+
+  const mkF = (over: Partial<CalculationInput>): CalculationInput => ({
+    rulesetMode: 'PB_PORDI',
+    matchCategory: 'SINGLE_1V1V1V1',
+    rulesConfig: {},
+    actionType: 'MENANG_BIASA',
+    currentSet: 1,
+    matchMode: 'ROUNDS',
+    targetType: 'FIXED_ROUNDS',
+    ...over,
+  } as CalculationInput);
+  const mkPlayers = (scores: number[]) =>
+    [1, 2, 3, 4].map((n) => ({
+      id: `p-${n}`,
+      seatNumber: n as 1 | 2 | 3 | 4,
+      teamIdentifier: 'NONE' as const,
+      currentScore: scores[n - 1],
+    }));
+
+  await check('ROUNDES t=7: ronde terakhir berakhir dengan seri di puncak → OVERTIME (targetValue+1, belum selesai)', async () => {
+    // Pemenang ronde = p-4 (+1 → 1); puncak tetap p-1 & p-2 seri di 3
+    const r = engine.calculateRound(mkF({
+      winnerPlayerId: 'p-4',
+      players: mkPlayers([3, 3, 0, 0]),
+      currentRoundsCount: 6,
+      targetValue: 7,
+    }));
+    assert.equal(r.isMatchComplete, false);
+    assert.equal(r.newTargetValue, 8);
+    // Puncak tetap seri di 3 setelah ronde ini
+    const sAfter = (id: string) => r.roundScores.find((s) => s.playerId === id)?.scoreAfter;
+    assert.equal(sAfter('p-1'), 3);
+    assert.equal(sAfter('p-2'), 3);
+  });
+
+  await check('Overtime diselesaikan: ronde berikut tanpa seri di puncak → selesai (target 8)', async () => {
+    // Masuk ronde 8 (count=7) dengan targetValue yang sudah dinaikkan menjadi 8;
+    // pemenang mutlak membuat puncak tidak lagi seri
+    const r = engine.calculateRound(mkF({
+      winnerPlayerId: 'p-1',
+      players: mkPlayers([4, 3, 0, 0]),
+      currentRoundsCount: 7,
+      targetValue: 8,
+    }));
+    assert.equal(r.isMatchComplete, true);
+  });
+}
+
+// ── Loop H: ORADO edge — Apollo exception Balak 0 & Balak 0 Mati (pure) ──
+async function loopH() {
+  console.log('--- Loop H: ORADO Apollo/Balak0 edge ---');
+  const engine = new OradoRulesetEngine();
+
+  const oradoInput = (over: Partial<CalculationInput>): CalculationInput => ({
+    rulesetMode: 'PB_ORADO',
+    matchCategory: 'TEAM_2V2',
+    rulesConfig: { oradoConfig: { apolloRule: true, deadBalak0Penalty: true } },
+    actionType: 'ORADO_COUNT',
+    winnerTeam: 'TEAM_A',
+    winnerPlayerId: 'p-1',
+    players: [1, 2, 3, 4].map((n) => ({
+      id: `p-${n}`,
+      seatNumber: n as 1 | 2 | 3 | 4,
+      teamIdentifier: (n % 2 === 1 ? 'TEAM_A' : 'TEAM_B') as 'TEAM_A' | 'TEAM_B',
+      currentScore: 0,
+    })),
+    currentRoundsCount: 0,
+    currentSet: 1,
+    targetValue: 101,
+    matchMode: 'POINTS',
+    targetType: 'SET_101',
+    ...over,
+  } as CalculationInput);
+
+  const bigA = [1, 2, 3, 4].map((n) => ({
+    id: `p-${n}`,
+    seatNumber: n as 1 | 2 | 3 | 4,
+    teamIdentifier: (n % 2 === 1 ? 'TEAM_A' : 'TEAM_B') as 'TEAM_A' | 'TEAM_B',
+    currentScore: n % 2 === 1 ? 55 : 0,
+  }));
+
+  await check('Apollo DITEKAN pada putaran Balak 0 (count%7==0): hanya menang set biasa', async () => {
+    const r = engine.calculateRound(oradoInput({ players: bigA, rawPointsInput: 46, currentRoundsCount: 0 }));
+    // Tim A mencapai 101 vs 0, TAPI ronde ini putaran Balak 0
+    assert.equal(r.isMatchComplete, false);
+    assert.equal(r.setJustWon, true);
+    assert.equal(r.teamASetWins, 1);
+  });
+
+  await check('Apollo AKTIF pada putaran non-Balak-0: menang 2 set langsung', async () => {
+    const r = engine.calculateRound(oradoInput({ players: bigA, rawPointsInput: 46, currentRoundsCount: 1 }));
+    assert.equal(r.isMatchComplete, true);
+    assert.equal(r.teamASetWins, 2);
+  });
+
+  await check('balak0Mati → +13 dan winType BALAK_0_MATI', async () => {
+    const r = engine.calculateRound(oradoInput({ rawPointsInput: 5, oradoMultipliers: { balak0Mati: true } }));
+    assert.equal(ptsHelper(r, 'p-1'), 18);
+    assert.equal(r.winType, 'BALAK_0_MATI');
+  });
+}
+
+function ptsHelper(r: CalculationResult, id: string) {
+  return r.roundScores.find((s) => s.playerId === id)?.pointsAwarded;
+}
+
+// ── Loop G: persistensi PORDI granular + rollback (DB integrasi) ──
+async function loopG() {
+  if (process.env.RUN_DB_TESTS !== '1') return;
+  console.log('--- Loop G: PORDI granular persist + rollback ---');
+
+  const mod: any = await import('../src/features/scorer/actions');
+  const { prisma } = await import('../src/lib/prisma');
+
+  const tenant = await prisma.tenant.findFirst({ where: { code: 'TAB-SLOWBAR' } });
+  assert.ok(tenant, 'tenant seed tidak ditemukan');
+  const table = await prisma.tableMaster.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { tableNumber: 'asc' },
+  });
+  assert.ok(table, 'tidak ada meja untuk tenant seed');
+
+  const session = await prisma.matchSession.create({
+    data: {
+      tenantId: tenant.id,
+      tableId: table.id,
+      tableNumber: table.tableNumber,
+      rulesetMode: 'PB_PORDI',
+      matchCategory: 'SINGLE_1V1V1V1',
+      matchMode: 'ROUNDS',
+      targetType: 'FIXED_ROUNDS',
+      targetValue: 99,
+      status: 'IN_PROGRESS',
+      playersData: [1, 2, 3, 4].map((n) => ({
+        id: `p-${n}`, seatNumber: n, name: `P${n}`,
+        teamIdentifier: 'NONE', currentScore: 0, totalScore: 0,
+      })) as any,
+      roundsHistory: [] as any,
+    },
+  });
+
+  try {
+    // Ronde 1: Domi Balak
+    const r1: any = await mod.commitRoundAction({
+      matchId: session.id, winnerPlayerId: 'p-1', actionType: 'DOMI_BALAK',
+    });
+    check('DOMI_BALAK tersimpan: pengunci +2 di DB', async () => {
+      assert.equal(r1.status, 'success');
+      const after: any = await prisma.matchSession.findUnique({ where: { id: session.id } });
+      const players = after.playersData as any[];
+      assert.equal(players.find((p) => p.id === 'p-1')?.currentScore, 2);
+      const last = (after.roundsHistory as any[]).at(-1);
+      assert.equal(last.actionType, 'DOMI_BALAK');
+    });
+
+    // Ronde 2: Kandang Kalah (cascade ke 3 lawan)
+    const r2: any = await mod.commitRoundAction({
+      matchId: session.id, winnerPlayerId: 'p-1', actionType: 'KANDANG',
+      kandangVariant: 'KALAH', kandangRecipients: ['p-2', 'p-3', 'p-4'],
+    });
+    check('KANDANG KALAH tersimpan: cascade +3/+2/+1, pengunci 0', async () => {
+      assert.equal(r2.status, 'success');
+      const after: any = await prisma.matchSession.findUnique({ where: { id: session.id } });
+      const byId = Object.fromEntries((after.playersData as any[]).map((p) => [p.id, p]));
+      assert.equal(byId['p-1'].currentScore, 2);   // tetap dari ronde 1
+      assert.equal(byId['p-2'].currentScore, 3);
+      assert.equal(byId['p-3'].currentScore, 2);
+      assert.equal(byId['p-4'].currentScore, 1);
+      const last = (after.roundsHistory as any[]).at(-1);
+      assert.equal(last.kandangVariant, 'KALAH');
+    });
+
+    // Rollback ronde 2 → rekonstruksi tepat ke state ronde 1
+    const rb: any = await mod.rollbackRoundAction(session.id);
+    check('rollback mengembalikan tepat ke hasil ronde 1', async () => {
+      assert.equal(rb.status, 'success');
+      const after: any = await prisma.matchSession.findUnique({ where: { id: session.id } });
+      assert.equal((after.roundsHistory as any[]).length, 1);
+      const byId = Object.fromEntries((after.playersData as any[]).map((p) => [p.id, p]));
+      assert.equal(byId['p-1'].currentScore, 2);
+      assert.equal(byId['p-2'].currentScore, 0);
+      assert.equal(byId['p-3'].currentScore, 0);
+      assert.equal(byId['p-4'].currentScore, 0);
+    });
+  } finally {
+    await prisma.matchSession.delete({ where: { id: session.id } }).catch(() => {});
+    await prisma.$disconnect();
+  }
+}
+
+// ── Loop I: ORADO balak0Mati persisten (DB integrasi) ──
+async function loopI() {
+  if (process.env.RUN_DB_TESTS !== '1') return;
+  console.log('--- Loop I: ORADO balak0Mati persist ---');
+
+  const mod: any = await import('../src/features/scorer/actions');
+  const { prisma } = await import('../src/lib/prisma');
+
+  const tenant = await prisma.tenant.findFirst({ where: { code: 'TAB-SLOWBAR' } });
+  assert.ok(tenant, 'tenant seed tidak ditemukan');
+  const table = await prisma.tableMaster.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { tableNumber: 'desc' }, // pakai meja lain agar tak bentrok Loop G restore
+  });
+  assert.ok(table, 'tidak ada meja untuk tenant seed');
+
+  const session = await prisma.matchSession.create({
+    data: {
+      tenantId: tenant.id,
+      tableId: table.id,
+      tableNumber: table.tableNumber,
+      rulesetMode: 'PB_ORADO',
+      matchCategory: 'TEAM_2V2',
+      matchMode: 'POINTS',
+      targetType: 'SET_101',
+      targetValue: 101,
+      status: 'IN_PROGRESS',
+      playersData: [1, 2, 3, 4].map((n) => ({
+        id: `p-${n}`, seatNumber: n, name: `P${n}`,
+        teamIdentifier: n % 2 === 1 ? 'TEAM_A' : 'TEAM_B',
+        currentScore: 0, totalScore: 0,
+      })) as any,
+      roundsHistory: [] as any,
+    },
+  });
+
+  try {
+    const res: any = await mod.commitRoundAction({
+      matchId: session.id,
+      winnerTeam: 'TEAM_A',
+      winnerPlayerId: 'p-1',
+      actionType: 'ORADO_COUNT',
+      rawPointsInput: 5,
+      oradoMultipliers: { balak0Mati: true },
+    });
+    // Assert terhadap return Server Action (authoritative) — re-query via
+    // pooler pgbouncer terbukiti flaky untuk read-immediately-after-write.
+    check('balak0Mati tersimpan: pemenang +18 (5+13), winType BALAK_0_MATI', async () => {
+      assert.equal(res?.status, 'success');
+      const players = (res.data.playersData as any[]);
+      const p1 = players.find((p) => p.id === 'p-1');
+      assert.equal(p1.currentScore, 18);
+      const last = (res.data.roundsHistory as any[]).at(-1);
+      assert.equal(last.winType, 'BALAK_0_MATI');
+    });
+  } finally {
+    await prisma.matchSession.delete({ where: { id: session.id } }).catch(() => {});
+    await prisma.$disconnect();
+  }
+}
+
 await loopB();
 await loopC();
 await loopD();
 await loopE();
+await loopF();
+await loopG();
+await loopH();
+await loopI();
 console.log(failures === 0 ? '\nALL GREEN' : `\n${failures} assertion(s) FAILED (loop merah)`);
 process.exit(failures === 0 ? 0 : 1);
