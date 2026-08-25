@@ -1,20 +1,25 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
-import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Sparkles, X, ChevronRight } from 'lucide-react';
+import { Trophy, ChevronRight, LogOut, X, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { releaseTableSessionAction } from '@/app/actions/tableActions';
+import { clearSessionCookieAction } from '@/app/actions/authActions';
+import { getOrCreateDeviceId } from '@/lib/device';
 
 interface Props {
   isOpen: boolean;
   onClose?: () => void;
 }
 
-export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
+export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
   const router = useRouter();
-  const { match, getRankedPlayers, getFunAwards, resetMatchOnServer } = useScorerStore();
+  const params = useParams();
+  const rawTableId = (params?.tableId as string) || '';
+  const { match, tenantCode, tableNumber, getRankedPlayers, getFunAwards, resetMatchOnServer, logout } = useScorerStore();
 
   useEffect(() => {
     if (isOpen) {
@@ -36,9 +41,39 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const runnerUps = rankedPlayers.slice(1); // Ranks 2, 3, 4
   const awards = getFunAwards();
 
-  const handleStartNewMatch = async () => {
-    await resetMatchOnServer();
-    if (onClose) onClose();
+  // Ticket GH#6: satu tombol terminal — SELESAI & KELUAR.
+  // Keluar = reset sesi (arsip bersih) + lepas kunci meja + hapus cookie + kembali ke portal.
+  const handleExit = async () => {
+    try {
+      await resetMatchOnServer();
+    } catch (err) {
+      console.error('Reset sesi gagal saat keluar:', err);
+    }
+
+    const deviceId = getOrCreateDeviceId();
+    const isUuid = !/^\d+$/.test(rawTableId);
+    const numericTable = Number(tableNumber);
+    try {
+      if (deviceId) {
+        await releaseTableSessionAction({
+          tableId: isUuid ? rawTableId : undefined,
+          tenantCode: (!isUuid && tenantCode) ? tenantCode : undefined,
+          tableNumber: (!isUuid && numericTable > 0) ? numericTable : undefined,
+          deviceId,
+        });
+      }
+    } catch (err) {
+      console.error('Gagal melepas kunci meja:', err);
+    }
+
+    try {
+      await clearSessionCookieAction();
+    } catch (err) {
+      console.error('Gagal menghapus cookie sesi:', err);
+    }
+
+    logout();
+    router.push('/play');
   };
 
   const getRankBadgeInfo = (rankNum: number) => {
@@ -77,27 +112,14 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <AnimatePresence>
-      <div
-        onClick={() => onClose && onClose()}
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/90 backdrop-blur-md cursor-pointer animate-in fade-in duration-200"
-      >
+      {/* Modal terminal (Ticket GH#6): tanpa backdrop-close / X — hanya SELESAI & KELUAR */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
         <motion.div
-          onClick={(e) => e.stopPropagation()}
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
           className="relative max-w-4xl w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-4 sm:p-6 shadow-2xl overflow-y-auto font-mono max-h-[90vh] cursor-default"
         >
-          {/* Top Close Button */}
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors z-10"
-              aria-label="Tutup"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
 
           {/* Top Ambient Golden Radial Glow */}
           <div className="absolute -top-24 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -140,20 +162,13 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </p>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons — Ticket GH#6: hanya SELESAI & KELUAR */}
               <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-2">
                 <button
-                  onClick={onClose || handleStartNewMatch}
+                  onClick={handleExit}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
-                  SELESAI & KELUAR <ChevronRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={handleStartNewMatch}
-                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" /> MATCH BARU
+                  <LogOut className="w-4 h-4" /> SELESAI & KELUAR <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
