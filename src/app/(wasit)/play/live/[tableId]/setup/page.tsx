@@ -162,6 +162,27 @@ export default function TableSetupPage({ params }: PageProps) {
     }
   };
 
+  // Ticket GH#4: markup input satu kursi, dipakai ulang layout flat & grouped
+  const renderSeatInput = (seat: (typeof SEAT_CONFIG)[number]) => {
+    const currentVal = players.find((p) => p.seatNumber === seat.seat)?.name || '';
+    return (
+      <div key={seat.seat} className="space-y-1.5 font-mono">
+        <label className="block text-xs font-bold text-slate-400">
+          {matchCategory === 'TEAM_2V2'
+            ? `Kursi ${seat.seat} (${seat.team === 'A' ? 'Tim A' : 'Tim B'})`
+            : `Kursi ${seat.seat} (Individu)`}
+        </label>
+        <input
+          type="text"
+          value={currentVal}
+          onChange={(e) => handlePlayerNameChange(seat.seat as any, e.target.value)}
+          placeholder={`Nama Pemain ${seat.seat}...`}
+          className={`w-full px-4 py-3 rounded-xl bg-slate-950 border text-white text-sm font-bold focus:outline-none transition-colors ${seat.border}`}
+        />
+      </div>
+    );
+  };
+
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6 p-4 md:p-6 pb-12 font-sans">
       {/* Top Banner */}
@@ -306,28 +327,31 @@ export default function TableSetupPage({ params }: PageProps) {
           3. Nama Pemain Per Kursi
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {SEAT_CONFIG.map((seat) => {
-            const currentVal = players.find((p) => p.seatNumber === seat.seat)?.name || '';
-
-            return (
-              <div key={seat.seat} className="space-y-1.5 font-mono">
-                <label className="block text-xs font-bold text-slate-400">
-                  {matchCategory === 'TEAM_2V2'
-                    ? `Kursi ${seat.seat} (${seat.team === 'A' ? 'Tim A' : 'Tim B'})`
-                    : `Kursi ${seat.seat} (Individu)`}
-                </label>
-                <input
-                  type="text"
-                  value={currentVal}
-                  onChange={(e) => handlePlayerNameChange(seat.seat as any, e.target.value)}
-                  placeholder={`Nama Pemain ${seat.seat}...`}
-                  className={`w-full px-4 py-3 rounded-xl bg-slate-950 border text-white text-sm font-bold focus:outline-none transition-colors ${seat.border}`}
-                />
+        {matchCategory === 'TEAM_2V2' ? (
+          /* Ticket GH#4: input dikelompokkan per tim agar rekan setim jelas */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(['A', 'B'] as const).map((team) => (
+              <div
+                key={team}
+                className={`rounded-2xl border p-4 space-y-3 ${
+                  team === 'A' ? 'border-emerald-800/70 bg-emerald-950/20' : 'border-sky-800/70 bg-sky-950/20'
+                }`}
+              >
+                <div className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${team === 'A' ? 'text-emerald-300' : 'text-sky-300'}`}>
+                  {team === 'A' ? '🟢 TIM A' : '🔵 TIM B'}
+                  <span className="text-[10px] font-bold text-slate-500 normal-case">
+                    (Kursi {team === 'A' ? '1 & 3' : '2 & 4'})
+                  </span>
+                </div>
+                {SEAT_CONFIG.filter((s) => s.team === team).map((seat) => renderSeatInput(seat))}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {SEAT_CONFIG.map((seat) => renderSeatInput(seat))}
+          </div>
+        )}
       </div>
 
       {/* STEP 4: RULESET SPECIFIC CONFIGURATION */}
