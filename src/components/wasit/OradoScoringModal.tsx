@@ -14,7 +14,7 @@ interface OradoScoringModalProps {
     winnerTeam: TeamIdentifier,
     winnerPlayerId: string,
     rawRemainingPoints: number,
-    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean }
+    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean; balak0Mati: boolean }
   ) => void;
 }
 
@@ -31,6 +31,7 @@ export const OradoScoringModal: React.FC<OradoScoringModalProps> = ({
   const [duaUjung, setDuaUjung] = useState<boolean>(false);
   const [balakHabis, setBalakHabis] = useState<boolean>(false);
   const [macetBeradu, setMacetBeradu] = useState<boolean>(false);
+  const [balak0Mati, setBalak0Mati] = useState<boolean>(false);
 
   const teamAPlayers = players.filter((p) => p.seatNumber === 1 || p.seatNumber === 3);
   const teamBPlayers = players.filter((p) => p.seatNumber === 2 || p.seatNumber === 4);
@@ -53,6 +54,7 @@ export const OradoScoringModal: React.FC<OradoScoringModalProps> = ({
   let computedPoints = rawVal;
   if (duaUjung || macetBeradu) computedPoints *= 2;
   if (balakHabis) computedPoints += 50;
+  if (balak0Mati) computedPoints += 13;
 
   const handleSubmit = () => {
     if (!currentWinnerId) return;
@@ -60,12 +62,14 @@ export const OradoScoringModal: React.FC<OradoScoringModalProps> = ({
       duaUjung,
       balakHabis,
       macetBeradu,
+      balak0Mati,
     });
     // Reset state & close modal
     setRawInputStr('');
     setDuaUjung(false);
     setBalakHabis(false);
     setMacetBeradu(false);
+    setBalak0Mati(false);
     onClose();
   };
 
@@ -219,6 +223,23 @@ export const OradoScoringModal: React.FC<OradoScoringModalProps> = ({
                 <span>BATU MACET / BERADU (AKHIR GAMPANG)</span>
               </div>
               <span className="text-[10px] text-purple-400 font-mono">BERADU ×2</span>
+            </button>
+
+            {/* Balak 0 Mati — Ticket GH#10 */}
+            <button
+              type="button"
+              onClick={() => setBalak0Mati(!balak0Mati)}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-left font-bold"
+            >
+              <div className="flex items-center gap-2">
+                {balak0Mati ? (
+                  <CheckSquare className="w-4 h-4 text-rose-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-600" />
+                )}
+                <span>BALAK 0 MATI (TIDAK BISA DITURUNKAN)</span>
+              </div>
+              <span className="text-[10px] text-rose-400 font-mono">+13 POIN</span>
             </button>
           </div>
         </div>

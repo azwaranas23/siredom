@@ -346,9 +346,94 @@ async function loopD() {
   }
 }
 
+// ── Loop E: matriks poin PB PORDI granular (Ticket GH#7, pure) ──
+async function loopE() {
+  console.log('--- Loop E: matriks poin PORDI ---');
+  const engine = new PordiRulesetEngine();
+
+  const mkInput = (over: Partial<CalculationInput>): CalculationInput => ({
+    rulesetMode: 'PB_PORDI',
+    matchCategory: 'SINGLE_1V1V1V1',
+    rulesConfig: {},
+    winnerPlayerId: 'p-1',
+    actionType: 'MENANG_BIASA',
+    players: [1, 2, 3, 4].map((n) => ({ id: `p-${n}`, seatNumber: n as 1|2|3|4, teamIdentifier: 'NONE' as const, currentScore: 0 })),
+    currentRoundsCount: 0,
+    currentSet: 1,
+    targetValue: 99, // hindari terminasi agar fokus ke poin
+    matchMode: 'ROUNDS',
+    targetType: 'FIXED_ROUNDS',
+    ...over,
+  } as CalculationInput);
+
+  const pts = (r: CalculationResult, id: string) => r.roundScores.find((s) => s.playerId === id)?.pointsAwarded;
+
+  // Domi keluarga
+  await check('DOMI_BALAK → pengunci +2', async () => {
+    const r = engine.calculateRound(mkInput({ actionType: 'DOMI_BALAK' }));
+    assert.equal(pts(r, 'p-1'), 2);
+  });
+  await check('CEKI_BIASA → +2', async () => {
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'CEKI_BIASA' })), 'p-1'), 2);
+  });
+  await check('CEKI_HABIS → +3', async () => {
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'CEKI_HABIS' })), 'p-1'), 3);
+  });
+  await check('CEKI_BALAK → +3', async () => {
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'CEKI_BALAK' })), 'p-1'), 3);
+  });
+  await check('CEKI_APOLLO → +4', async () => {
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'CEKI_APOLLO' })), 'p-1'), 4);
+  });
+  await check('legacy CEKI → +2 · PALANG → +4 (kompatibilitas data lama)', async () => {
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'CEKI' })), 'p-1'), 2);
+    assert.equal(pts(engine.calculateRound(mkInput({ actionType: 'PALANG' })), 'p-1'), 4);
+  });
+
+  // Kandang Tunggal
+  await check('Kandang MENANG Tunggal → pengunci +3', async () => {
+    const r = engine.calculateRound(mkInput({ actionType: 'KANDANG', kandangVariant: 'MENANG' }));
+    assert.equal(pts(r, 'p-1'), 3);
+  });
+  await check('Kandang SERI Tunggal → pengunci +1 & lawan-seri +1', async () => {
+    const r = engine.calculateRound(mkInput({ actionType: 'KANDANG', kandangVariant: 'SERI', kandangRecipients: ['p-2'] }));
+    assert.equal(pts(r, 'p-1'), 1);
+    assert.equal(pts(r, 'p-2'), 1);
+  });
+  await check('Kandang KALAH Tunggal → cascade +3/+2/+1, pengunci 0', async () => {
+    const r = engine.calculateRound(mkInput({
+      actionType: 'KANDANG', kandangVariant: 'KALAH',
+      kandangRecipients: ['p-2', 'p-3', 'p-4'],
+    }));
+    assert.equal(pts(r, 'p-1'), 0);
+    assert.equal(r.roundScores.find((s) => s.playerId === 'p-1')?.statusTag, 'BERDIRI');
+    assert.equal(pts(r, 'p-2'), 3);
+    assert.equal(pts(r, 'p-3'), 2);
+    assert.equal(pts(r, 'p-4'), 1);
+  });
+
+  // Kandang Ganda
+  const gandaOver = { matchCategory: 'TEAM_2V2' as const, players: [1,2,3,4].map((n) => ({ id:`p-${n}`, seatNumber:n as 1|2|3|4, teamIdentifier:(n%2===1?'TEAM_A':'TEAM_B') as 'TEAM_A'|'TEAM_B', currentScore:0 })) };
+  await check('Ganda Kandang MENANG → pengunci +2', async () => {
+    const r = engine.calculateRound(mkInput({ ...gandaOver, actionType:'KANDANG', kandangVariant:'MENANG', winnerTeam:'TEAM_A' }));
+    assert.equal(pts(r, 'p-1'), 2);
+  });
+  await check('Ganda Kandang SERI → +1/+1', async () => {
+    const r = engine.calculateRound(mkInput({ ...gandaOver, actionType:'KANDANG', kandangVariant:'SERI', winnerTeam:'TEAM_A', kandangRecipients:['p-2'] }));
+    assert.equal(pts(r, 'p-1'), 1);
+    assert.equal(pts(r, 'p-2'), 1);
+  });
+  await check('Ganda Kandang KALAH → lawan terpilih +3, pengunci 0', async () => {
+    const r = engine.calculateRound(mkInput({ ...gandaOver, actionType:'KANDANG', kandangVariant:'KALAH', winnerTeam:'TEAM_A', kandangRecipients:['p-2'] }));
+    assert.equal(pts(r, 'p-1'), 0);
+    assert.equal(pts(r, 'p-2'), 3);
+    assert.equal(pts(r, 'p-4'), 0); // rekan lawan tidak ikut dapat
+  });
+}
+
 await loopB();
 await loopC();
 await loopD();
-
+await loopE();
 console.log(failures === 0 ? '\nALL GREEN' : `\n${failures} assertion(s) FAILED (loop merah)`);
 process.exit(failures === 0 ? 0 : 1);

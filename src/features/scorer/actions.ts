@@ -19,9 +19,13 @@ export interface CommitRoundInput {
     duaUjung?: boolean;
     balakHabis?: boolean;
     macetBeradu?: boolean;
+    balak0Mati?: boolean;
   };
   isPenalty?: boolean;
   penaltyAmount?: number;
+  /** Ticket GH#7 — Kandang PORDI granular */
+  kandangVariant?: import('@/types/domino').KandangVariant;
+  kandangRecipients?: string[];
 }
 
 export interface ApplyPenaltyInput {
@@ -49,7 +53,7 @@ export interface SetupMatchInput {
 
 export async function commitRoundAction(input: CommitRoundInput) {
   try {
-    const { matchId, winnerPlayerId, winnerTeam, actionType, victimPlayerId, manualStatuses, rawPointsInput, oradoMultipliers, isPenalty, penaltyAmount } = input;
+    const { matchId, winnerPlayerId, winnerTeam, actionType, victimPlayerId, manualStatuses, rawPointsInput, oradoMultipliers, isPenalty, penaltyAmount, kandangVariant, kandangRecipients } = input;
 
     // 1. Fetch match session
     const matchSession = await prisma.matchSession.findUnique({
@@ -101,6 +105,8 @@ export async function commitRoundAction(input: CommitRoundInput) {
       oradoMultipliers,
       isPenalty,
       penaltyAmount,
+      kandangVariant,
+      kandangRecipients,
       players: existingPlayers.map((p) => ({
         id: p.id,
         seatNumber: p.seatNumber,
@@ -129,6 +135,8 @@ export async function commitRoundAction(input: CommitRoundInput) {
       winType: calculationResult.winType,
       rawPointsInput: Number(rawPointsInput) || 0,
       isPenalty: Boolean(calculationResult.isPenalty),
+      ...(kandangVariant && { kandangVariant }),
+      ...(kandangRecipients?.length && { kandangRecipients }),
       timestamp: new Date().toISOString(),
       scores: calculationResult.roundScores.map((scoreItem) => {
         let targetPlayerId = scoreItem.playerId;

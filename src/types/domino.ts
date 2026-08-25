@@ -6,12 +6,21 @@ export type TeamIdentifier = 'NONE' | 'TEAM_A' | 'TEAM_B';
 
 export type ActionType = 
   | "MENANG_BIASA" // 👑 Menang Biasa (+1)
-  | "KANDANG"      // 🔥 Kandang (+2)
-  | "CEKI"         // ✅ Ceki (+3)
-  | "PALANG"       // 🐐 Palang (+4)
-  | "TANGKAP"      // ENC Tangkap (+3 for capturer, -3 for captured)
+  | "KANDANG"      // 🔒 Kandang — poin via kandangVariant (devlog/0010)
+  | "CEKI"         // ✅ Ceki (legacy alias → Ceki Biasa)
+  | "PALANG"       // 🐐 Palang/Apollo (legacy alias)
+  | "TANGKAP"      // 🚔 Tangkap
   | "ORADO_COUNT"  // 🎲 Count-based score input for PB ORADO
-  | "DENDA_POIN";  // 🚨 Referee penalty points (+1 / +4)
+  | "DENDA_POIN"   // 🚨 Referee penalty points (+1/+3/+4)
+  // --- PORDI granular (devlog/0010, Ticket GH#7) ---
+  | "DOMI_BALAK"   // 🀄 Domi Balak (+2)
+  | "CEKI_BIASA"   // ✅ Ceki Biasa (+2)
+  | "CEKI_HABIS"   // ✨ Ceki Habis (+3)
+  | "CEKI_BALAK"   // 🀄✅ Ceki Balak (+3)
+  | "CEKI_APOLLO"; // 🐐 Ceki Apollo/Palang (+4)
+
+/** Sub-jenis Kandang PORDI dipilih wasit di Level-2 modal (Ticket GH#7). */
+export type KandangVariant = 'MENANG' | 'SERI' | 'KALAH';
 
 export type RoundStatusTag = 
   | "MENANG"    // Winner

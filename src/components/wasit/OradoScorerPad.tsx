@@ -41,7 +41,7 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
     setToastMessage(`Ronde #${roundNum} Orado Tersimpan (${winnerName})`);
     const timer = setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 6000);
     setToastTimer(timer);
   };
 
@@ -49,7 +49,7 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
     winnerTeam: TeamIdentifier,
     winnerPlayerId: string,
     rawRemainingPoints: number,
-    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean }
+    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean; balak0Mati?: boolean }
   ) => {
     const roundNumBefore = match.rounds.length + 1;
     const winnerObj = match.players.find((p) => p.id === winnerPlayerId);

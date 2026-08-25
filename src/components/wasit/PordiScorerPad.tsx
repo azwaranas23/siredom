@@ -5,7 +5,7 @@ import { useScorerStore } from '@/store/useScorerStore';
 import { ActionType } from '@/types/domino';
 import { TeamScoreHeader } from '@/components/wasit/TeamScoreHeader';
 import { VictoryAnimationOverlay } from '@/components/wasit/VictoryAnimationOverlay';
-import { WinnerActionModal } from '@/components/wasit/WinnerActionModal';
+import PordiWinnerModal from '@/components/wasit/PordiWinnerModal';
 import { TangkapModal } from '@/components/wasit/TangkapModal';
 import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
 import { PenaltyModal } from '@/components/wasit/PenaltyModal';
@@ -38,6 +38,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     selectedWinnerId,
     selectedAction,
     selectWinnerPlayer,
+    selectWinnerAndAction,
     commitCurrentRound,
     resetFSM,
     rollbackLastRound,
@@ -46,6 +47,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     getTeamBScore,
     getRankedPlayers,
     getLast5RoundHistory,
+    setKandangContext,
   } = useScorerStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     setToastMessage(`Ronde #${roundNum} Tersimpan (${winnerName})`);
     const timer = setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 6000);
     setToastTimer(timer);
   };
 
@@ -309,11 +311,21 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
         })}
       </div>
 
-      {/* Bottom Sheet Winner Action Selection Modal (Step 1) */}
-      <WinnerActionModal
+      {/* Bottom Sheet Winner Action Selection Modal — PB PORDI 2-level (Ticket GH#7) */}
+      <PordiWinnerModal
         isOpen={fsmState === 'ACTION_SELECTED'}
         onClose={resetFSM}
         winnerPlayerId={selectedWinnerId}
+        players={match.players}
+        matchCategory={match.matchCategory}
+        onFinal={(actionType, kandang) => {
+          if (kandang?.kandangVariant) {
+            setKandangContext(kandang.kandangVariant, kandang.kandangRecipients ?? []);
+          }
+          if (selectedWinnerId) {
+            selectWinnerAndAction(selectedWinnerId, actionType);
+          }
+        }}
       />
 
       {/* Tangkap Modal */}

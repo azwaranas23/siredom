@@ -20,6 +20,7 @@ import {
   TenantMaster,
   PlayerDocument,
   RoundHistoryDocument,
+  KandangVariant,
 } from '@/types/domino';
 import { commitRoundAction, rollbackRoundAction, applyPenaltyAction, setupMatchAction, resetMatchRoundsAction } from '@/features/scorer/actions';
 import { getRulesetEngine } from '@/features/scorer/engine/RulesetEngineFactory';
@@ -100,6 +101,8 @@ interface ScorerStore {
   selectedAction: ActionType | null;
   selectedVictimId: string | null; // For Tangkap
   manualStatuses: Record<string, RoundStatusTag | 'berdiri' | 'duduk' | string>; // playerID -> status
+  kandangVariant?: KandangVariant; // Ticket GH#7 — sub-jenis Kandang PORDI
+  kandangRecipients?: string[];    // urutan penerima poin lawan
 
   // Background Sync & Offline Queue State
   syncStatus: SyncStatus;
@@ -144,6 +147,7 @@ interface ScorerStore {
   // FSM & Transient UI Handlers
   selectWinnerPlayer: (winnerId: string) => void;
   selectWinnerAndAction: (winnerId: string, action: ActionType) => void;
+  setKandangContext: (variant: KandangVariant, recipients: string[]) => void;
   setManualPlayerStatus: (playerId: string, status: RoundStatusTag | 'berdiri' | 'duduk' | string) => void;
   selectTangkapVictim: (victimId: string) => void;
   resetFSM: () => void;
@@ -154,7 +158,7 @@ interface ScorerStore {
     winnerTeam: TeamIdentifier,
     winnerPlayerId: string,
     rawRemainingPoints: number,
-    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean }
+    multipliers: { duaUjung: boolean; balakHabis: boolean; macetBeradu: boolean; balak0Mati?: boolean }
   ) => Promise<Round | null>;
   commitCurrentRound: () => Promise<Round | null>;
   rollbackLastRound: () => Promise<void>;
@@ -850,6 +854,11 @@ export const useScorerStore = create<ScorerStore>()(
         });
       },
 
+      // Ticket GH#7: konteks sub-jenis Kandang dari Level-2 modal
+      setKandangContext: (variant, recipients) => {
+        set({ kandangVariant: variant, kandangRecipients: recipients });
+      },
+
       resetFSM: () => {
         set({
           fsmState: 'IDLE',
@@ -857,12 +866,14 @@ export const useScorerStore = create<ScorerStore>()(
           selectedAction: null,
           selectedVictimId: null,
           manualStatuses: {},
+          kandangVariant: undefined,
+          kandangRecipients: [],
         });
       },
 
       // 0ms Optimistic Standard Round Commit
       commitCurrentRound: async () => {
-        const { match, selectedWinnerId, selectedAction, selectedVictimId, manualStatuses } = get();
+        const { match, selectedWinnerId, selectedAction, selectedVictimId, manualStatuses, kandangVariant, kandangRecipients } = get();
         if (!selectedWinnerId || !selectedAction) return null;
 
         const curTableNum = match.tableNumber || get().tableNumber;
@@ -879,6 +890,8 @@ export const useScorerStore = create<ScorerStore>()(
           actionType: selectedAction,
           victimPlayerId: selectedVictimId,
           manualStatuses,
+          kandangVariant,
+          kandangRecipients,
           players: match.players,
           currentRoundsCount: match.rounds.length,
           currentSet: match.currentSet || 1,
@@ -952,6 +965,8 @@ export const useScorerStore = create<ScorerStore>()(
             actionType: selectedAction,
             victimPlayerId: selectedVictimId,
             manualStatuses,
+            kandangVariant,
+            kandangRecipients,
           },
           timestamp: Date.now(),
         };

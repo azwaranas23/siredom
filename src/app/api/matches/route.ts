@@ -206,6 +206,8 @@ export async function POST(req: Request) {
         oradoMultipliers: input.oradoMultipliers || input.multipliers,
         isPenalty: input.isPenalty,
         penaltyAmount: input.penaltyAmount,
+        kandangVariant: input.kandangVariant,
+        kandangRecipients: input.kandangRecipients,
       });
 
       return NextResponse.json(res, { status: res.status === 'success' ? 201 : 400 });

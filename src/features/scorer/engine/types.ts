@@ -1,4 +1,4 @@
-import { RulesetMode, MatchCategory, ActionType, RoundStatusTag, TeamIdentifier, PointsConfig, RulesConfig } from '@/types/domino';
+import { RulesetMode, MatchCategory, ActionType, RoundStatusTag, TeamIdentifier, PointsConfig, RulesConfig, KandangVariant } from '@/types/domino';
 
 export interface CalculationPlayerInput {
   id: string;
@@ -18,13 +18,18 @@ export interface CalculationInput {
   victimPlayerId?: string | null;
   manualStatuses?: Record<string, RoundStatusTag | string>;
   rawPointsInput?: number;
-  oradoMultipliers?: {
-    duaUjung?: boolean;
-    balakHabis?: boolean;
-    macetBeradu?: boolean;
-  };
-  isPenalty?: boolean;
-  penaltyAmount?: number;
+   oradoMultipliers?: {
+     duaUjung?: boolean;
+     balakHabis?: boolean;
+     macetBeradu?: boolean;
+     balak0Mati?: boolean;
+   };
+   isPenalty?: boolean;
+   penaltyAmount?: number;
+   /** Ticket GH#7 — sub-jenis Kandang PORDI (dipilih wasit di Level-2 modal). */
+   kandangVariant?: KandangVariant;
+   /** Urutan penerima poin untuk Kandang: [0] terbesar. SERI: [0]=lawan seri. */
+   kandangRecipients?: string[];
   players: CalculationPlayerInput[];
   currentRoundsCount: number;
   currentSet: number;

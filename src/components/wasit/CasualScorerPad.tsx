@@ -94,7 +94,7 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
     setToastMessage(`Ronde #${roundNum} Tersimpan (${winnerName})`);
     const timer = setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, 6000);
     setToastTimer(timer);
   };
 
@@ -131,38 +131,37 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fsmState]);
 
-  // Mid-Game Target Update Handler
+  // Mid-Game Target Update Handler — Ticket GH#8: persistensi terjamin & gagal terlihat
   const handleSaveTargetMidGame = async () => {
     const val = Number(editTargetValue) || (editMode === 'rounds' ? 10 : 50);
     updateTargetMidGame(editMode, val);
     setIsSettingsOpen(false);
 
-    try {
-      if (!tenantCode) {
-        console.error('updateTargetMidGame: tenantCode kosong — login ulang melalui /play');
-        return;
-      }
-      const codeToUse = tenantCode;
-      const curTableNum = match.tableNumber || Number(tableId) || 1;
-      const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${curTableNum}`);
-      const getJson = await getRes.json();
+    // Optimistic sudah diterapkan; persist ke sesi YANG BENAR via match.id
+    // (GET ulang dulu = sumber bug "target kembali ke nilai lama").
+    const matchId = match.id;
+    if (!matchId || matchId === 'empty') {
+      window.alert('Sesi belum tersimpan di database — target hanya berlaku lokal.');
+      return;
+    }
 
-      if (getJson.data?.id) {
-        await fetch('/api/matches', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'UPDATE_TARGET',
-            matchId: getJson.data.id,
-            updateTargetData: {
-              matchMode: editMode,
-              targetValue: val,
-            },
-          }),
-        });
+    try {
+      const res = await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_TARGET',
+          matchId,
+          updateTargetData: { matchMode: editMode, targetValue: val },
+        }),
+      });
+      const json = await res.json();
+      if (json.status !== 'success') {
+        window.alert(`Gagal menyimpan target baru: ${json.message || 'unknown'}`);
       }
     } catch (err) {
       console.error('Failed to update target in DB:', err);
+      window.alert('Gagal menyimpan target baru ke database. Periksa koneksi lalu ubah ulang.');
     }
   };
 

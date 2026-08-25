@@ -14,6 +14,7 @@ export class OradoRulesetEngine implements IRulesetEngine {
       isPenalty,
       penaltyAmount = 1,
       victimPlayerId,
+      currentRoundsCount,
     } = input;
 
     let totalAwarded = Number(rawPointsInput) || 0;
@@ -23,6 +24,10 @@ export class OradoRulesetEngine implements IRulesetEngine {
     }
     if (oradoMultipliers.balakHabis) {
       totalAwarded += 50;
+    }
+    // Balak 0 Mati = +13 (regulasi ORADO; Ticket GH#10)
+    if (oradoMultipliers.balak0Mati) {
+      totalAwarded += 13;
     }
 
     const roundScores: CalculationResult['roundScores'] = [];
@@ -97,7 +102,10 @@ export class OradoRulesetEngine implements IRulesetEngine {
     if (teamAScore >= 101) setWinner = 'TEAM_A';
     else if (teamBScore >= 101) setWinner = 'TEAM_B';
 
-    const isApollo = apolloRuleActive && (
+    // Apollo exception (Ticket GH#10 / regulasi): Apollo TIDAK berlaku pada
+    // putaran pembuka Balak 0 (ronde dengan count % 7 === 0).
+    const isBalakZeroRound = (currentRoundsCount || 0) % 7 === 0;
+    const isApollo = apolloRuleActive && !isBalakZeroRound && (
       (teamAScore >= 101 && teamBScore === 0) ||
       (teamBScore >= 101 && teamAScore === 0)
     );
@@ -120,7 +128,9 @@ export class OradoRulesetEngine implements IRulesetEngine {
       }
     }
 
-    const winTypeStr = oradoMultipliers.balakHabis
+    const winTypeStr = oradoMultipliers.balak0Mati
+      ? 'BALAK_0_MATI'
+      : oradoMultipliers.balakHabis
       ? 'BALAK_HABIS'
       : oradoMultipliers.duaUjung
       ? 'DUA_UJUNG'

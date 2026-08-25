@@ -1,6 +1,21 @@
 import { IRulesetEngine, CalculationInput, CalculationResult } from './types';
 import { RoundStatusTag } from '@/types/domino';
 
+/**
+ * PB PORDI Ruleset Engine (devlog/0010, Ticket GH#7)
+ *
+ * Matriks poin (Tunggal / Ganda identik, kecuali Kandang):
+ *   MENANG_BIASA +1 · DOMI_BALAK +2
+ *   CEKI_BIASA|CEKI +2 · CEKI_HABIS +3 · CEKI_BALAK +3 · CEKI_APOLLO|PALANG +4
+ *   TANGKAP +3 / korban −3
+ *
+ * Kandang — sub-jenis dipilih wasit (pemain memberi tahu), tanpa input angka:
+ *   MENANG: pengunci +3 (Tunggal) / +2 (Ganda)
+ *   SERI  : pengunci +1 dan lawan-seri +1 (kandangRecipients[0])
+ *   KALAH : pengunci 0;
+ *           Tunggal → kandangRecipients urut: +3, +2, +1
+ *           Ganda   → kandangRecipients[0]: +3
+ */
 export class PordiRulesetEngine implements IRulesetEngine {
   calculateRound(input: CalculationInput): CalculationResult {
     const {
@@ -15,22 +30,40 @@ export class PordiRulesetEngine implements IRulesetEngine {
       targetValue = 7,
       matchMode,
       matchCategory,
+      kandangVariant,
+      kandangRecipients = [],
     } = input;
 
-    // PORDI fixed point structure
-    const pordiPoints = {
-      menang_biasa: 1,
-      kandang: 2,
-      ceki: 2,
-      palang: 4,
-      tangkap: 3,
-      ditangkap: -3,
-      berdiri: 0,
-      duduk: 0,
+    const pordiPoints: Record<string, number> = {
+      MENANG_BIASA: 1,
+      DOMI_BALAK: 2,
+      CEKI_BIASA: 2,
+      CEKI: 2, // legacy alias Ceki Biasa
+      CEKI_HABIS: 3,
+      CEKI_BALAK: 3,
+      CEKI_APOLLO: 4,
+      PALANG: 4, // legacy alias Apollo
+      TANGKAP: 3,
     };
 
     const roundScores: CalculationResult['roundScores'] = [];
     let winType = String(actionType);
+
+    const pushScore = (
+      playerId: string,
+      seatNumber: number | undefined,
+      statusTag: RoundStatusTag,
+      pointsAwarded: number,
+      prevScore: number
+    ) => {
+      roundScores.push({
+        playerId,
+        seatNumber,
+        statusTag,
+        pointsAwarded,
+        scoreAfter: prevScore + pointsAwarded,
+      });
+    };
 
     if (isPenalty || actionType === 'DENDA_POIN') {
       winType = 'DENDA_POIN';
@@ -58,56 +91,56 @@ export class PordiRulesetEngine implements IRulesetEngine {
           pointsAwarded = penaltyAmount;
         }
 
-        roundScores.push({
-          playerId: player.id,
-          seatNumber: player.seatNumber,
-          statusTag,
-          pointsAwarded,
-          scoreAfter: player.currentScore + pointsAwarded,
-        });
+        pushScore(player.id, player.seatNumber, statusTag, pointsAwarded, player.currentScore);
+      });
+    } else if (actionType === 'KANDANG' && kandangVariant) {
+      // ── Kandang 3 kondisi (devlog/0010) ──────────────────────────────
+      const recipients = new Set(kandangRecipients.filter(Boolean));
+      // MENANG: +3 Tunggal / +2 Ganda · SERI: pengunci hanya +1 · KALAH: pengunci 0
+      let lockPoint = matchCategory === 'TEAM_2V2' ? 2 : 3;
+      if (kandangVariant === 'SERI') lockPoint = 1;
+
+      players.forEach((player) => {
+        let statusTag: RoundStatusTag = 'DUDUK';
+        let pointsAwarded = 0;
+
+        if (player.id === winnerPlayerId) {
+          // Pengunci: menang/seri dapat poin; kalah nol.
+          statusTag = kandangVariant === 'KALAH' ? 'BERDIRI' : 'MENANG';
+          pointsAwarded = kandangVariant === 'KALAH' ? 0 : lockPoint;
+        } else if (recipients.has(player.id)) {
+          // Penerima poin lawan (urutan taps): SERI [0]=+1; KALAH Tunggal +3/+2/+1; KALAH Ganda +3.
+          statusTag = 'MENANG';
+          if (kandangVariant === 'SERI') pointsAwarded = 1;
+          else if (matchCategory === 'TEAM_2V2') pointsAwarded = 3;
+          else pointsAwarded = kandangRecipients.indexOf(player.id) === 0 ? 3 : kandangRecipients.indexOf(player.id) === 1 ? 2 : 1;
+        }
+
+        pushScore(player.id, player.seatNumber, statusTag, pointsAwarded, player.currentScore);
       });
     } else {
+      // ── Domi Biasa / Balak / Ceki variants / Tangkap ─────────────────
       players.forEach((player) => {
         let statusTag: RoundStatusTag = 'DUDUK';
         let pointsAwarded = 0;
 
         if (player.id === winnerPlayerId) {
           statusTag = 'MENANG';
-          if (actionType === 'MENANG_BIASA') pointsAwarded = pordiPoints.menang_biasa;
-          else if (actionType === 'KANDANG') pointsAwarded = pordiPoints.kandang;
-          else if (actionType === 'CEKI') pointsAwarded = pordiPoints.ceki;
-          else if (actionType === 'PALANG') pointsAwarded = pordiPoints.palang;
-          else if (actionType === 'TANGKAP') pointsAwarded = pordiPoints.tangkap;
-          else pointsAwarded = 1;
-        } else if (actionType === 'KANDANG') {
-          statusTag = 'BERDIRI';
-          pointsAwarded = pordiPoints.berdiri;
+          pointsAwarded = pordiPoints[actionType] ?? 1;
         } else if (actionType === 'TANGKAP') {
           if (player.id === victimPlayerId) {
             statusTag = 'DITANGKAP';
-            pointsAwarded = pordiPoints.ditangkap;
+            pointsAwarded = -3;
           } else {
             statusTag = 'DUDUK';
-            pointsAwarded = pordiPoints.duduk;
+            pointsAwarded = 0;
           }
         } else {
           const statusChoice = String(manualStatuses[player.id] || 'DUDUK').toUpperCase();
-          if (statusChoice === 'BERDIRI') {
-            statusTag = 'BERDIRI';
-            pointsAwarded = pordiPoints.berdiri;
-          } else {
-            statusTag = 'DUDUK';
-            pointsAwarded = pordiPoints.duduk;
-          }
+          statusTag = statusChoice === 'BERDIRI' ? 'BERDIRI' : 'DUDUK';
         }
 
-        roundScores.push({
-          playerId: player.id,
-          seatNumber: player.seatNumber,
-          statusTag,
-          pointsAwarded,
-          scoreAfter: player.currentScore + pointsAwarded,
-        });
+        pushScore(player.id, player.seatNumber, statusTag, pointsAwarded, player.currentScore);
       });
     }
 
@@ -123,8 +156,7 @@ export class PordiRulesetEngine implements IRulesetEngine {
 
     let isTargetReached = false;
     if (isModeRounds) {
-      // Off-by-one fix (devlog/0006): yang sedang di-commit adalah ronde ke-(currentRoundsCount+1),
-      // jadi target ronde tercapai TEPAT saat ronde terakhir di-commit, bukan satu ronde kemudian.
+      // Off-by-one fix (devlog/0006): target tercapai tepat saat ronde terakhir di-commit.
       isTargetReached = nextRoundsCount >= targetValue;
     } else if (isTeamCategory) {
       const teamAScore = roundScores
