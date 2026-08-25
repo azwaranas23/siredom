@@ -12,9 +12,12 @@ export default function AdminHistoryPage() {
 
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!tenantCode || !tenantCode.trim()) {
+        setIsLoading(false);
+        return;
+      }
       try {
-        const codeToUse = tenantCode || 'TAB-SLOWBAR';
-        const res = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=1`);
+        const res = await fetch(`/api/matches?tenantCode=${encodeURIComponent(tenantCode)}&tableNumber=1`);
         const json = await res.json();
 
         if (json.data) {

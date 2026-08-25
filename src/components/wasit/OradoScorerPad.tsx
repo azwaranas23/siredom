@@ -62,7 +62,7 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
     }
   };
 
-  const handleApplyPenalty = async (offenderPlayerId: string, amount: 1 | 4) => {
+  const handleApplyPenalty = async (offenderPlayerId: string, amount: 1 | 3 | 4) => {
     const roundNumBefore = match.rounds.length + 1;
     const committedRound = await applyFastPenalty(offenderPlayerId, amount);
 
@@ -77,9 +77,14 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
     await rollbackLastRound();
   };
 
-  // Detect Apollo Condition (Set score 101 vs 0)
+  // Deteksi Apollo Condition (Set score 101 vs 0)
   const isApolloA = teamAScore >= 101 && teamBScore === 0;
   const isApolloB = teamBScore >= 101 && teamAScore === 0;
+
+  // Indikator regulasi (devlog/0008):
+  // - Set aktif dari progres Best of 3
+  // - Rotasi hak pembuka mengikuti balak: Ronde 1 = Balak 0, lalu 1..6 berputar (regulasi ORADO)
+  const currentBalak = match.rounds.length % 7;
 
   return (
     <div className="h-full flex-1 flex flex-col min-h-0 overflow-hidden font-sans select-none relative justify-between">
@@ -105,8 +110,13 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
             PB ORADO STANDAR (2V2)
           </span>
           <span className="text-cyan-200 font-bold">
-            Target 101 Poin / Set • Winner of 2 Sets
+            SET {match.currentSet || 1}/3 • GILIRAN BALAK {currentBalak}
           </span>
+          {(isApolloA || isApolloB) && (
+            <span className="px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] uppercase animate-pulse">
+              ⚡ APOLLO!
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

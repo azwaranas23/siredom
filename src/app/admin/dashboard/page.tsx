@@ -39,9 +39,14 @@ export default function AdminDashboardPage() {
 
   // Fetch Tables & Tenant Info via Server Action on mount & tenantCode change
   const loadData = async () => {
+    if (!tenantCode || !tenantCode.trim()) {
+      setMasterTables([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+      const codeToUse = tenantCode;
       const res = await getTablesByTenant(codeToUse);
 
       if (res.success) {
@@ -89,8 +94,8 @@ export default function AdminDashboardPage() {
     }
 
     startTransition(async () => {
-      const codeToUse = tenantCode || 'TAB-SLOWBAR';
-      const res = await createTable(codeToUse);
+      if (!tenantCode || !tenantCode.trim()) return;
+      const res = await createTable(tenantCode);
 
       if (res.success) {
         await loadData();

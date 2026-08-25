@@ -14,7 +14,7 @@ interface Props {
 
 export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const router = useRouter();
-  const { match, getRankedPlayers, getFunAwards, resetMatch } = useScorerStore();
+  const { match, getRankedPlayers, getFunAwards, resetMatchOnServer } = useScorerStore();
 
   useEffect(() => {
     if (isOpen) {
@@ -36,8 +36,8 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const runnerUps = rankedPlayers.slice(1); // Ranks 2, 3, 4
   const awards = getFunAwards();
 
-  const handleStartNewMatch = () => {
-    resetMatch();
+  const handleStartNewMatch = async () => {
+    await resetMatchOnServer();
     if (onClose) onClose();
   };
 

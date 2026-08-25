@@ -123,7 +123,8 @@ export class CasualRulesetEngine implements IRulesetEngine {
 
     let isTargetReached = false;
     if (isModeRounds) {
-      isTargetReached = currentRoundsCount >= targetValue;
+      // Off-by-one fix (devlog/0006): target ronde tercapai TEPAT saat ronde terakhir di-commit.
+      isTargetReached = nextRoundsCount >= targetValue;
     } else if (isTeamCategory) {
       const teamAScore = roundScores
         .filter((s) => s.seatNumber === 1 || s.seatNumber === 3)

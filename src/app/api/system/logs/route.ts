@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { RoundsHistoryDocument } from '@/types/domino';
 
 export async function GET() {
   try {
@@ -49,7 +50,7 @@ export async function GET() {
 
     // Matches Logs
     recentMatches.forEach((m) => {
-      const roundsHistory: any[] = Array.isArray(m.roundsHistory) ? (m.roundsHistory as any[]) : [];
+      const roundsHistory = Array.isArray(m.roundsHistory) ? (m.roundsHistory as RoundsHistoryDocument) : [];
       logs.push({
         id: `match-${m.id}`,
         timestamp: m.updatedAt.toISOString(),

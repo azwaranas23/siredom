@@ -152,3 +152,49 @@ export interface FunAwards {
   cekiMaster: { player: Player; count: number } | null;
 }
 
+// ============================================================
+// JSON Document-Relational Model (lihat docs/adr/0001)
+// Pemilik tipe tunggal untuk dokumen MatchSession.playersData
+// dan MatchSession.roundsHistory. Invarian: skor akhir setiap
+// pemain HARUS dapat direkonstruksi dari roundsHistory.
+// ============================================================
+
+/** Item dokumen MatchSession.playersData (array, 4 item). */
+export type PlayerDocument = Player & {
+  teamIdentifier: TeamIdentifier;
+  totalScore: number;
+};
+
+/** Array dokumen playersData. */
+export type PlayersDataDocument = PlayerDocument[];
+
+/** Item scores di dalam RoundHistoryDocument. */
+export type RoundScoreDocument = Omit<RoundPlayerScore, 'id' | 'roundId'> & {
+  id?: string;
+  playerId: string;
+  seatNumber?: number;
+  statusTag: RoundStatusTag;
+  pointsAwarded: number;
+  scoreAfter: number;
+};
+
+/** Item dokumen MatchSession.roundsHistory (append-only). */
+export type RoundHistoryDocument = Omit<Round, 'matchId' | 'scores'> & {
+  matchId?: string;
+  timestamp: string;
+  scores: RoundScoreDocument[];
+};
+
+/** Array dokumen roundsHistory. */
+export type RoundsHistoryDocument = RoundHistoryDocument[];
+
+/** Info meja aman untuk dikirim ke klien publik (TANPA pinCode). */
+export interface PublicTableInfo {
+  id: string;
+  tableNumber: number;
+  tableName: string;
+  status: string;
+  isLocked: boolean;
+  activeDeviceId: string | null;
+}
+

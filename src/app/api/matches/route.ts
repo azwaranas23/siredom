@@ -1,26 +1,27 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { setupMatchAction, commitRoundAction, rollbackRoundAction } from '@/features/scorer/actions';
+import { PlayersDataDocument, PublicTableInfo, RoundsHistoryDocument } from '@/types/domino';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const tenantCode = searchParams.get('tenantCode') || 'TAB-SLOWBAR';
+    const tenantCode = searchParams.get('tenantCode');
     const tableIdParam = searchParams.get('tableId');
     const tableNumberParam = searchParams.get('tableNumber');
     const tableNumber = Number(tableNumberParam) || 1;
 
-    // Try finding tenant by code
-    let tenant = await prisma.tenant.findFirst({
-      where: { code: { equals: tenantCode, mode: 'insensitive' } },
-    });
-
-    // Fallback: try finding first active tenant if code doesn't match
-    if (!tenant) {
-      tenant = await prisma.tenant.findFirst({
-        where: { status: 'active' },
-      });
+    // Tenant code wajib — tidak ada fallback hardcoded.
+    if (!tenantCode || !tenantCode.trim()) {
+      return NextResponse.json(
+        { status: 'error', message: 'Parameter tenantCode wajib diisi' },
+        { status: 400 }
+      );
     }
+
+    const tenant = await prisma.tenant.findFirst({
+      where: { code: { equals: tenantCode.trim(), mode: 'insensitive' } },
+    });
 
     if (!tenant) {
       return NextResponse.json({ status: 'error', message: 'Tenant tidak ditemukan' }, { status: 404 });
@@ -44,6 +45,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: 'error', message: 'Meja tidak ditemukan' }, { status: 404 });
     }
 
+    // Respons aman untuk klien publik: TANPA pinCode.
+    const publicTables: PublicTableInfo[] = masterTables.map((t) => ({
+      id: t.id,
+      tableNumber: t.tableNumber,
+      tableName: t.tableName,
+      status: t.status,
+      isLocked: t.isLocked,
+      activeDeviceId: t.activeDeviceId,
+    }));
+
     const match = await prisma.matchSession.findFirst({
       where: {
         tenantId: tenant.id,
@@ -53,39 +64,36 @@ export async function GET(req: Request) {
       orderBy: { createdAt: 'desc' },
     });
 
+    const tableInfo: PublicTableInfo = {
+      id: table.id,
+      tableNumber: table.tableNumber,
+      tableName: table.tableName,
+      status: table.status,
+      isLocked: table.isLocked,
+      activeDeviceId: table.activeDeviceId,
+    };
+
     if (!match) {
       return NextResponse.json({
         status: 'success',
         data: null,
-        masterTables,
-        tableInfo: {
-          id: table.id,
-          tableNumber: table.tableNumber,
-          tableName: table.tableName,
-          isLocked: (table as any).isLocked || false,
-          activeDeviceId: (table as any).activeDeviceId || null,
-        },
+        masterTables: publicTables,
+        tableInfo,
         message: `Belum ada sesi pertandingan aktif di Meja #${table.tableNumber}`,
       });
     }
 
     const formattedMatch = {
       ...match,
-      players: (match.playersData as any[]) || [],
-      rounds: (match.roundsHistory as any[]) || [],
+      players: (match.playersData as unknown as PlayersDataDocument) || [],
+      rounds: (match.roundsHistory as unknown as RoundsHistoryDocument) || [],
     };
 
     return NextResponse.json({
       status: 'success',
       data: formattedMatch,
-      masterTables,
-      tableInfo: {
-        id: table.id,
-        tableNumber: table.tableNumber,
-        tableName: table.tableName,
-        isLocked: (table as any).isLocked || false,
-        activeDeviceId: (table as any).activeDeviceId || null,
-      },
+      masterTables: publicTables,
+      tableInfo,
     });
   } catch (error: any) {
     console.error('Failed to fetch match:', error);
@@ -101,28 +109,57 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, tableId, deviceId, matchId, setupData, roundData, updateTargetData } = body;
 
-    // Action 1: Lock Table Session to Single Device
+    // Action 1: Lock Table Session to Single Device (atomic anti-race claim)
     if (action === 'LOCK_TABLE' && tableId && deviceId) {
-      const table = await prisma.tableMaster.update({
-        where: { id: tableId },
+      const claim = await prisma.tableMaster.updateMany({
+        where: {
+          id: tableId,
+          OR: [{ isLocked: false }, { activeDeviceId: deviceId }],
+        },
         data: {
           isLocked: true,
           activeDeviceId: deviceId,
         },
       });
 
-      return NextResponse.json({ status: 'success', data: table });
+      if (claim.count === 0) {
+        const current = await prisma.tableMaster.findUnique({
+          where: { id: tableId },
+          select: { activeDeviceId: true, isLocked: true },
+        });
+        return NextResponse.json(
+          {
+            status: 'error',
+            message: 'Meja sedang dikunci oleh perangkat lain',
+            lockedBy: current?.activeDeviceId ?? null,
+          },
+          { status: 409 }
+        );
+      }
+
+      const locked = await prisma.tableMaster.findUnique({ where: { id: tableId } });
+      return NextResponse.json({ status: 'success', data: locked });
     }
 
-    // Action 2: Unlock Table Session
+    // Action 2: Unlock Table Session (hanya perangkat pemilik sesi yang boleh membuka)
     if (action === 'UNLOCK_TABLE' && tableId) {
-      const table = await prisma.tableMaster.update({
-        where: { id: tableId },
+      const release = await prisma.tableMaster.updateMany({
+        where: {
+          id: tableId,
+          ...(deviceId ? { OR: [{ activeDeviceId: deviceId }, { activeDeviceId: null }] } : {}),
+        },
         data: {
           isLocked: false,
           activeDeviceId: null,
         },
       });
+
+      if (release.count === 0) {
+        return NextResponse.json(
+          { status: 'error', message: 'Sesi lock bukan milik perangkat ini' },
+          { status: 409 }
+        );
+      }
 
       return NextResponse.json({ status: 'success', message: 'Session lock berhasil dibuka' });
     }
@@ -147,7 +184,8 @@ export async function POST(req: Request) {
       const input = setupData || body;
       const res = await setupMatchAction({
         matchId: input.matchId || matchId,
-        tenantCode: input.tenantCode || 'TAB-SLOWBAR',
+        tenantCode: input.tenantCode,
+        tableId: input.tableId || tableId,
         tableNumber: Number(input.tableNumber) || 1,
         rulesetMode: input.rulesetMode,
         matchCategory: input.matchCategory,
@@ -158,6 +196,7 @@ export async function POST(req: Request) {
         rulesConfig: input.rulesConfig,
         oradoConfig: input.oradoConfig,
         players: input.players || [],
+        deviceId: input.deviceId || deviceId,
       });
 
       return NextResponse.json(res, { status: res.status === 'success' ? 200 : 400 });

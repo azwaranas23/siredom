@@ -1,6 +1,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { issueSessionCookie } from '@/app/actions/authActions';
 import { revalidatePath } from 'next/cache';
 
 const PLAN_MAX_TABLES: Record<string, number> = {
@@ -9,12 +10,120 @@ const PLAN_MAX_TABLES: Record<string, number> = {
   enterprise: 25,
 };
 
+export interface VerifyTablePinResult {
+  success: boolean;
+  error?: string;
+  role?: 'wasit';
+  tenantCode?: string;
+  tableNumber?: number;
+  tableId?: string;
+  hasActiveMatch?: boolean;
+  lockedByOtherDevice?: boolean;
+}
+
+/**
+ * Verifikasi PIN meja secara server-side (tanpa membocorkan pinCode ke klien),
+ * lalu mengklaim session lock secara ATOMIK untuk satu perangkat.
+ * Dua perangkat yang memasukkan PIN sama bersamaan → hanya satu yang menang.
+ */
+export async function verifyTablePinAction(input: {
+  tenantCode: string;
+  tableNumber: number;
+  pin: string;
+  deviceId: string;
+}): Promise<VerifyTablePinResult> {
+  try {
+    const code = String(input.tenantCode || '').trim().toUpperCase();
+    const pin = String(input.pin || '').trim();
+    const deviceId = String(input.deviceId || '').trim();
+
+    if (!code || !pin || !deviceId) {
+      return { success: false, error: 'Kode Penyelenggara, Nomor Meja, PIN, dan ID Perangkat wajib diisi' };
+    }
+
+    // Atomic claim: update hanya terjadi jika meja belum terkunci ATAU
+    // sudah terkunci oleh perangkat yang sama (re-claim).
+    const claim = await prisma.tableMaster.updateMany({
+      where: {
+        tableNumber: input.tableNumber,
+        pinCode: pin,
+        tenant: { code: code },
+        OR: [{ isLocked: false }, { activeDeviceId: deviceId }],
+      },
+      data: {
+        isLocked: true,
+        activeDeviceId: deviceId,
+        status: 'IN_MATCH',
+      },
+    });
+
+    if (claim.count === 0) {
+      // Bedakan antara PIN salah vs meja dikuasai perangkat lain.
+      const table = await prisma.tableMaster.findFirst({
+        where: { tableNumber: input.tableNumber, tenant: { code } },
+        select: { id: true, isLocked: true, activeDeviceId: true },
+      });
+
+      if (!table) {
+        return { success: false, error: `Meja #${input.tableNumber} tidak ditemukan untuk penyelenggara ${code}` };
+      }
+
+      if (table.isLocked && table.activeDeviceId && table.activeDeviceId !== deviceId) {
+        return {
+          success: false,
+          error: 'Meja sedang digunakan oleh perangkat lain. Minta panitia melepas sesi terlebih dahulu.',
+          lockedByOtherDevice: true,
+        };
+      }
+
+      return { success: false, error: 'PIN Meja salah. Coba lagi.' };
+    }
+
+    const claimedTable = await prisma.tableMaster.findFirst({
+      where: { tableNumber: input.tableNumber, tenant: { code } },
+      include: { tenant: true },
+    });
+
+    if (!claimedTable?.tenant?.code) {
+      return { success: false, error: 'Meja ini belum terhubung ke penyelenggara mana pun' };
+    }
+
+    await issueSessionCookie({
+      role: 'wasit',
+      tenantCode: claimedTable.tenant.code,
+      tableNumber: claimedTable.tableNumber,
+    });
+
+    // Deteksi apakah sesi pertandingan aktif sudah ada (untuk routing setup/live)
+    const activeMatch = await prisma.matchSession.findFirst({
+      where: { tableId: claimedTable.id, status: 'IN_PROGRESS' },
+      select: { id: true },
+    });
+
+    return {
+      success: true,
+      role: 'wasit' as const,
+      tenantCode: claimedTable.tenant.code,
+      tableNumber: claimedTable.tableNumber,
+      tableId: claimedTable.id,
+      hasActiveMatch: Boolean(activeMatch),
+    };
+  } catch (error: any) {
+    console.error('verifyTablePinAction Error:', error);
+    return { success: false, error: error.message || 'Gagal verifikasi PIN meja' };
+  }
+}
+
 /**
  * Fetch master tables for a specific tenant by tenantCode from Supabase PostgreSQL via Prisma
  */
 export async function getTablesByTenant(tenantCode: string) {
   try {
-    const codeToUse = (tenantCode || 'TAB-SLOWBAR').trim().toUpperCase();
+    const codeToUse = String(tenantCode || '').trim().toUpperCase();
+
+    if (!codeToUse) {
+      return { success: false, error: 'Kode Tenant wajib diisi', data: [] };
+    }
 
     const tenant = await prisma.tenant.findUnique({
       where: { code: codeToUse },
@@ -60,7 +169,11 @@ export async function getTablesByTenant(tenantCode: string) {
  */
 export async function createTable(tenantCode: string, tableName?: string) {
   try {
-    const codeToUse = (tenantCode || 'TAB-SLOWBAR').trim().toUpperCase();
+    const codeToUse = String(tenantCode || '').trim().toUpperCase();
+
+    if (!codeToUse) {
+      return { success: false, error: 'Kode Tenant wajib diisi' };
+    }
 
     const tenant = await prisma.tenant.findUnique({
       where: { code: codeToUse },

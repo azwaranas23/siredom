@@ -1,7 +1,9 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from '@/lib/session';
 import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
 
 export interface LoginInput {
   role: 'superadmin' | 'admin' | 'wasit';
@@ -12,7 +14,9 @@ export interface LoginInput {
 
 /**
  * Server Action for authenticating Super Admin, Cafe Admin, and Wasit users.
- * Supports email or tenant code login and verifies passwords with bcrypt.compare().
+ * Verifies credentials strictly against the database (bcrypt for passwords,
+ * exact-match PIN per TableMaster). Issues a signed httpOnly session cookie
+ * that middleware uses to protect /admin/*, /superadmin/*, and mutating API calls.
  */
 export async function loginAction(input: LoginInput) {
   try {
@@ -28,7 +32,6 @@ export async function loginAction(input: LoginInput) {
     if (role === 'superadmin') {
       const normalizedEmail = trimmedInput.toLowerCase();
 
-      // Check User table for SUPER_ADMIN role
       const user = await prisma.user.findFirst({
         where: {
           email: normalizedEmail,
@@ -36,29 +39,18 @@ export async function loginAction(input: LoginInput) {
         },
       });
 
-      if (user) {
-        const isMatch = await bcrypt.compare(password, user.passwordHash);
-        if (isMatch || password === 'admin123' || password === 'password123') {
-          return {
-            success: true,
-            role: 'superadmin',
-            tenantCode: 'SUPERADMIN',
-            tableNumber: 1,
-          };
-        }
+      if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+        return { success: false, error: 'Kredensial Super Admin tidak valid' };
       }
 
-      // Hardcoded fallback for default Super Admin credentials
-      if (normalizedEmail === 'superadmin@siredom.com' && (password === 'admin123' || password === 'password123')) {
-        return {
-          success: true,
-          role: 'superadmin',
-          tenantCode: 'SUPERADMIN',
-          tableNumber: 1,
-        };
-      }
+      await issueSessionCookie({ role: 'superadmin', tenantCode: 'SUPERADMIN', tableNumber: 1 });
 
-      return { success: false, error: 'Kredensial Super Admin tidak valid' };
+      return {
+        success: true,
+        role: 'superadmin',
+        tenantCode: 'SUPERADMIN',
+        tableNumber: 1,
+      };
     }
 
     // 2. Cafe Admin Authentication
@@ -84,23 +76,15 @@ export async function loginAction(input: LoginInput) {
         return { success: false, error: 'Akun Tenant Anda sedang ditangguhkan (Suspended). Silakan hubungi Super Admin.' };
       }
 
-      // Find user record or check tenant.adminPasswordHash
-      const cafeAdminUser = tenant.users.find((u) => (u.role as string) === 'ADMIN' || (u.role as string) === 'CAFE_ADMIN');
+      // Verify against User record first, then Tenant.adminPasswordHash as backup
+      const cafeAdminUser = tenant.users.find((u) => u.role === 'ADMIN');
       const storedHash = cafeAdminUser?.passwordHash || tenant.adminPasswordHash;
 
-      let isMatch = false;
-      if (storedHash) {
-        isMatch = await bcrypt.compare(password, storedHash);
-      }
-
-      // Fallback for default seed password "password123"
-      if (!isMatch && (password === 'password123' || password === tenant.adminPasswordHash)) {
-        isMatch = true;
-      }
-
-      if (!isMatch) {
+      if (!storedHash || !(await bcrypt.compare(password, storedHash))) {
         return { success: false, error: 'Password Admin Cafe tidak valid' };
       }
+
+      await issueSessionCookie({ role: 'admin', tenantCode: tenant.code, tableNumber: 1 });
 
       return {
         success: true,
@@ -114,7 +98,7 @@ export async function loginAction(input: LoginInput) {
     if (role === 'wasit') {
       const selectedTableNum = Number(tableNumber) || 1;
 
-      // Find active master table matching tableNumber and pinCode
+      // Exact match on table number AND pin code — no fallbacks.
       const table = await prisma.tableMaster.findFirst({
         where: {
           tableNumber: selectedTableNum,
@@ -126,22 +110,20 @@ export async function loginAction(input: LoginInput) {
       });
 
       if (!table) {
-        // Fallback for default seed PIN "1234"
-        if (trimmedInput === '1234') {
-          return {
-            success: true,
-            role: 'wasit',
-            tenantCode: 'TAB-SLOWBAR',
-            tableNumber: selectedTableNum,
-          };
-        }
         return { success: false, error: `PIN Wasit Meja #${selectedTableNum} salah atau tidak ditemukan` };
       }
+
+      const tenantCode = table.tenant?.code;
+      if (!tenantCode) {
+        return { success: false, error: 'Meja ini belum terhubung ke penyelenggara mana pun' };
+      }
+
+      await issueSessionCookie({ role: 'wasit', tenantCode, tableNumber: table.tableNumber });
 
       return {
         success: true,
         role: 'wasit',
-        tenantCode: table.tenant?.code || 'TAB-SLOWBAR',
+        tenantCode,
         tableNumber: table.tableNumber,
       };
     }
@@ -151,4 +133,17 @@ export async function loginAction(input: LoginInput) {
     console.error('loginAction Error:', error);
     return { success: false, error: error.message || 'Gagal melakukan login' };
   }
+}
+
+/** Terbitkan cookie sesi bertanda tangan (httpOnly). */
+export async function issueSessionCookie(payload: { role: 'superadmin' | 'admin' | 'wasit'; tenantCode?: string; tableNumber?: number }) {
+  const token = await createSessionToken(payload);
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
 }

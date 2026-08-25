@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Tv, Trophy, TrendingUp, Radio, ChevronDown, AlertCircle } from 'lucide-react';
-import { Match } from '@/types/domino';
+import { Match, PlayerDocument, RoundHistoryDocument, RoundScoreDocument } from '@/types/domino';
 import { supabase } from '@/lib/supabase';
 
 const PLAYER_COLORS = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b']; // Red, Blue, Green, Yellow
@@ -24,8 +24,13 @@ export default function LeaderboardTVPage() {
   const fetchLiveMatchForTable = async (tNum: number, isInitial = false) => {
     if (isInitial) setIsLoading(true);
     try {
-      const codeToUse = tenantCode || 'TAB-SLOWBAR';
-      const res = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${tNum}`);
+      const codeToUse = tenantCode?.trim() || '';
+      if (!codeToUse) {
+        setLiveMatch(null);
+        setIsLoading(false);
+        return;
+      }
+      const res = await fetch(`/api/matches?tenantCode=${encodeURIComponent(codeToUse)}&tableNumber=${tNum}`);
       const json = await res.json();
 
       if (json.status === 'success' && json.data) {
@@ -45,7 +50,7 @@ export default function LeaderboardTVPage() {
           pointsConfig: m.pointsConfig,
           rulesConfig: m.rulesConfig,
           status: (m.status?.toLowerCase() as any) || 'in_progress',
-          players: (m.players || m.playersData || []).map((p: any) => ({
+          players: ((m.players || m.playersData || []) as PlayerDocument[]).map((p) => ({
             id: p.id,
             seatNumber: p.seatNumber,
             name: p.name,
@@ -53,7 +58,7 @@ export default function LeaderboardTVPage() {
             currentScore: p.currentScore ?? 0,
             totalScore: p.totalScore ?? 0,
           })),
-          rounds: (m.rounds || m.roundsHistory || []).map((r: any) => ({
+          rounds: ((m.rounds || m.roundsHistory || []) as RoundHistoryDocument[]).map((r) => ({
             id: r.id,
             setNumber: r.setNumber || 1,
             roundNumber: r.roundNumber,
@@ -65,10 +70,11 @@ export default function LeaderboardTVPage() {
             rawPointsInput: r.rawPointsInput,
             isPenalty: r.isPenalty,
             timestamp: r.timestamp || new Date().toISOString(),
-            scores: (r.scores || []).map((s: any) => ({
+            scores: (r.scores || []).map((s: RoundScoreDocument) => ({
               playerId: s.playerId,
               seatNumber: s.seatNumber,
               status: s.statusTag || 'DUDUK',
+              statusTag: (s.statusTag || 'DUDUK') as RoundScoreDocument['statusTag'],
               pointsAwarded: s.pointsAwarded ?? 0,
               scoreAfter: s.scoreAfter ?? 0,
             })),
@@ -120,7 +126,7 @@ export default function LeaderboardTVPage() {
   // Active match data or fallback to empty state
   const matchToDisplay: Match = liveMatch || {
     id: 'empty',
-    tenantId: tenantCode || 'TAB-SLOWBAR',
+    tenantId: tenantCode || '',
     tableNumber: selectedTableNum,
     rulesetMode: 'CASUAL',
     matchCategory: 'SINGLE_1V1V1V1',

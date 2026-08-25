@@ -127,10 +127,16 @@ export default function TableSetupPage({ params }: PageProps) {
     }));
 
     try {
+      if (!tenantCode || !tenantCode.trim()) {
+        setSubmitError('Sesi kedaluwarsa. Silakan login ulang melalui portal /play.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const result = await setupMatchSessionAction({
         tableId,
         matchId: match.id === 'empty' ? undefined : match.id,
-        tenantCode: tenantCode || 'TAB-SLOWBAR',
+        tenantCode,
         rulesetMode,
         matchCategory,
         matchMode,

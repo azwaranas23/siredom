@@ -74,7 +74,7 @@ export async function POST(req: Request) {
           create: {
             tableNumber: 1,
             tableName: 'Meja Utama 01',
-            pinCode: '1234',
+            pinCode: Math.floor(1000 + Math.random() * 9000).toString(),
             status: 'active',
           },
         },

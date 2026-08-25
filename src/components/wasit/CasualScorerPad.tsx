@@ -138,7 +138,11 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
     setIsSettingsOpen(false);
 
     try {
-      const codeToUse = tenantCode || 'TAB-SLOWBAR';
+      if (!tenantCode) {
+        console.error('updateTargetMidGame: tenantCode kosong — login ulang melalui /play');
+        return;
+      }
+      const codeToUse = tenantCode;
       const curTableNum = match.tableNumber || Number(tableId) || 1;
       const getRes = await fetch(`/api/matches?tenantCode=${codeToUse}&tableNumber=${curTableNum}`);
       const getJson = await getRes.json();
@@ -342,7 +346,7 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
         isOpen={fsmState === 'MODAL_TANGKAP_VICTIM'}
         onClose={resetFSM}
         onSuccess={(round, actionType, winnerName) => {
-          triggerUndoToast(match.rounds.length, winnerName);
+          triggerUndoToast(round.roundNumber ?? 1, winnerName);
           setVictoryOverlayData({
             actionType,
             winnerName,
@@ -355,7 +359,8 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
         isOpen={fsmState === 'MODAL_MANUAL_STATUS'}
         onClose={resetFSM}
         onSuccess={(round, actionType, winnerName) => {
-          triggerUndoToast(match.rounds.length, winnerName);
+          // devlog/0006: roundNumber dari ronde yang baru di-commit (closure match = stale)
+          triggerUndoToast(round.roundNumber ?? 1, winnerName);
           setVictoryOverlayData({
             actionType,
             winnerName,

@@ -18,8 +18,10 @@ import {
   RoundHistoryIcon,
   TableMaster,
   TenantMaster,
+  PlayerDocument,
+  RoundHistoryDocument,
 } from '@/types/domino';
-import { commitRoundAction, rollbackRoundAction, applyPenaltyAction, setupMatchAction } from '@/features/scorer/actions';
+import { commitRoundAction, rollbackRoundAction, applyPenaltyAction, setupMatchAction, resetMatchRoundsAction } from '@/features/scorer/actions';
 import { getRulesetEngine } from '@/features/scorer/engine/RulesetEngineFactory';
 
 export type FSMState =
@@ -147,7 +149,7 @@ interface ScorerStore {
   resetFSM: () => void;
 
   // Optimistic 0ms Touch Response Handlers
-  applyFastPenalty: (offenderPlayerId: string, penaltyAmount: 1 | 4) => Promise<Round | null>;
+  applyFastPenalty: (offenderPlayerId: string, penaltyAmount: 1 | 3 | 4) => Promise<Round | null>;
   commitOradoRound: (
     winnerTeam: TeamIdentifier,
     winnerPlayerId: string,
@@ -158,6 +160,7 @@ interface ScorerStore {
   rollbackLastRound: () => Promise<void>;
   updateRoundInline: (roundId: string, updatedRound: Partial<Round>) => void;
   resetMatch: () => void;
+  resetMatchOnServer: () => Promise<void>;
   startNextSet: () => void;
 
   // Helper Selectors
@@ -177,9 +180,9 @@ export const useScorerStore = create<ScorerStore>()(
     (set, get) => ({
       match: INITIAL_MATCH_TABLE_1,
       tableSessions: DEFAULT_TABLE_SESSIONS,
-      tenantCode: 'TAB-SLOWBAR',
+      tenantCode: '',
       tableNumber: 1,
-      isAuthenticated: true,
+      isAuthenticated: false,
       userRole: 'wasit',
 
       fsmState: 'IDLE',
@@ -196,7 +199,7 @@ export const useScorerStore = create<ScorerStore>()(
       masterTables: DEFAULT_MASTER_TABLES,
       tenants: DEFAULT_TENANTS,
 
-      setAuth: (authenticated, role, tenantCode = 'TAB-SLOWBAR', tableNum = 1) => {
+      setAuth: (authenticated, role, tenantCode = '', tableNum = 1) => {
         const sessions = get().tableSessions || DEFAULT_TABLE_SESSIONS;
         let targetMatch = sessions[tableNum];
         let updatedSessions = { ...sessions };
@@ -231,7 +234,7 @@ export const useScorerStore = create<ScorerStore>()(
         const category: MatchCategory = (dbMatch.matchCategory?.toUpperCase() as MatchCategory) || currentMatch.matchCategory || 'SINGLE_1V1V1V1';
         const rulesetMode: RulesetMode = (dbMatch.rulesetMode?.toUpperCase() as RulesetMode) || currentMatch.rulesetMode || 'CASUAL';
 
-        let rawPlayers: any[] = [];
+        let rawPlayers: PlayerDocument[] = [];
         if (Array.isArray(dbMatch.players)) {
           rawPlayers = dbMatch.players;
         } else if (Array.isArray(dbMatch.playersData)) {
@@ -240,7 +243,7 @@ export const useScorerStore = create<ScorerStore>()(
           try { rawPlayers = JSON.parse(dbMatch.playersData); } catch { rawPlayers = []; }
         }
 
-        let rawRounds: any[] = [];
+        let rawRounds: RoundHistoryDocument[] = [];
         if (Array.isArray(dbMatch.rounds)) {
           rawRounds = dbMatch.rounds;
         } else if (Array.isArray(dbMatch.roundsHistory)) {
@@ -553,7 +556,11 @@ export const useScorerStore = create<ScorerStore>()(
         targetType = 'FIXED_ROUNDS',
         oradoConfig = { apolloRule: true, deadBalak0Penalty: true }
       ) => {
-        const tenantCode = get().tenantCode || 'TAB-SLOWBAR';
+        const tenantCode = get().tenantCode;
+        if (!tenantCode || !tenantCode.trim()) {
+          console.error('setupMatchFromStore: tenantCode kosong — login ulang melalui /play');
+          return;
+        }
         const tableNumber = get().tableNumber || 1;
         const currentMatchId = get().match.id;
 
@@ -579,8 +586,7 @@ export const useScorerStore = create<ScorerStore>()(
       },
 
       // 0ms Optimistic Referee Rapid Penalty
-      applyFastPenalty: async (offenderPlayerId, penaltyAmount) => {
-        const { match } = get();
+      applyFastPenalty: async (offenderPlayerId, penaltyAmount) => {        const { match } = get();
         const curTableNum = match.tableNumber || get().tableNumber;
 
         // 1. Run IRulesetEngine calculation synchronously (0ms)
@@ -733,6 +739,17 @@ export const useScorerStore = create<ScorerStore>()(
           };
         });
 
+        // Cermin transisi set ORADO (devlog/0008, sinkron dengan commitRoundAction):
+        // set dimenangkan tapi match lanjut → arsipkan skor set ke totalScore, mulai dari 0.
+        const isSetTransition = Boolean(calcResult.setJustWon) && !calcResult.isMatchComplete;
+        const playersForState = isSetTransition
+          ? updatedPlayers.map((p) => ({
+              ...p,
+              totalScore: (p.totalScore ?? 0) + p.currentScore,
+              currentScore: 0,
+            }))
+          : updatedPlayers;
+
         const nextStatus = calcResult.isMatchComplete ? 'completed' : 'in_progress';
         const optimisticMatch: Match = {
           ...match,
@@ -741,7 +758,7 @@ export const useScorerStore = create<ScorerStore>()(
           teamASetWins: calcResult.teamASetWins ?? match.teamASetWins,
           teamBSetWins: calcResult.teamBSetWins ?? match.teamBSetWins,
           status: nextStatus as any,
-          players: updatedPlayers,
+          players: playersForState,
           rounds: [...match.rounds, optimisticRound],
         };
 
@@ -1015,6 +1032,30 @@ export const useScorerStore = create<ScorerStore>()(
           lastRoundDelta: {},
         });
         get().resetFSM();
+      },
+
+      // Reset match yang PERSISTEN: hapus riwayat ronde di database (mode/pemain dipertahankan),
+      // lalu hidrasi ulang state dari DB. Antrean mutasi stale dibuang agar ronde lama tidak "hidup" kembali.
+      resetMatchOnServer: async () => {
+        const matchId = get().match.id;
+        if (!matchId || matchId === 'empty') {
+          // Belum ada sesi di DB — cukup reset lokal.
+          get().resetMatch();
+          return;
+        }
+
+        const res = await resetMatchRoundsAction(matchId);
+        if (res.status === 'success' && res.data) {
+          set({
+            pendingSyncQueue: [],
+            syncStatus: 'SYNCED',
+            lastRoundDelta: {},
+          });
+          get().setMatchFromDb(res.data);
+          get().resetFSM();
+        } else {
+          console.error('resetMatchOnServer gagal:', res.message);
+        }
       },
 
       startNextSet: () => {

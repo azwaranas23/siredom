@@ -111,7 +111,7 @@ export class PordiRulesetEngine implements IRulesetEngine {
       });
     }
 
-const nextRoundsCount = currentRoundsCount + 1;
+    const nextRoundsCount = currentRoundsCount + 1;
     const isModeRounds = String(matchMode).toUpperCase() === 'ROUNDS';
     const isTeamCategory = matchCategory === 'TEAM_2V2';
 
@@ -123,7 +123,9 @@ const nextRoundsCount = currentRoundsCount + 1;
 
     let isTargetReached = false;
     if (isModeRounds) {
-      isTargetReached = currentRoundsCount >= targetValue;
+      // Off-by-one fix (devlog/0006): yang sedang di-commit adalah ronde ke-(currentRoundsCount+1),
+      // jadi target ronde tercapai TEPAT saat ronde terakhir di-commit, bukan satu ronde kemudian.
+      isTargetReached = nextRoundsCount >= targetValue;
     } else if (isTeamCategory) {
       const teamAScore = roundScores
         .filter((s) => s.seatNumber === 1 || s.seatNumber === 3)

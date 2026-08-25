@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { History, Trophy, Calendar } from 'lucide-react';
+import { useScorerStore } from '@/store/useScorerStore';
 
 interface PageProps {
   params: Promise<{
@@ -11,13 +12,18 @@ interface PageProps {
 
 export default function TableHistoryPage({ params }: PageProps) {
   const { tableId } = use(params);
+  const { tenantCode } = useScorerStore();
   const [historyMatches, setHistoryMatches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!tenantCode || !tenantCode.trim()) {
+        setIsLoading(false);
+        return;
+      }
       try {
-        const res = await fetch(`/api/matches?tenantCode=TAB-SLOWBAR&tableId=${tableId}`);
+        const res = await fetch(`/api/matches?tenantCode=${encodeURIComponent(tenantCode)}&tableId=${tableId}`);
         const json = await res.json();
 
         if (json.data) {
@@ -31,7 +37,7 @@ export default function TableHistoryPage({ params }: PageProps) {
     };
 
     fetchHistory();
-  }, [tableId]);
+  }, [tableId, tenantCode]);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 font-sans">

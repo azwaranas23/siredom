@@ -70,8 +70,8 @@ model Tenant {
   name              String
   slug              String         @unique
   code              String         @unique
-  adminEmail        String         @default("admin@tabslowbar.com")
-  adminPasswordHash String         @default("$2b$10$/nCfsjyVRAZ.n8m3YEMlZO9tKFMMg93dufln4JBs45CDlBB/Xvur2")
+  adminEmail        String         @unique
+  adminPasswordHash String // Wajib disediakan eksplisit saat create (bcrypt) — tanpa default
   subscriptionPlan  String         @default("pro") // basic, pro, enterprise
   status            String         @default("active") // active, suspended, expired
   maxTables         Int            @default(10)

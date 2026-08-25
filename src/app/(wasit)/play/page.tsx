@@ -3,16 +3,27 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
-import { Dices, Lock, ShieldCheck, ArrowRight, Play, CheckCircle2, RefreshCw } from 'lucide-react';
+import { verifyTablePinAction } from '@/app/actions/tableActions';
+import { Dices, Lock, ShieldCheck, RefreshCw } from 'lucide-react';
 
 interface TableMasterItem {
   id: string;
   tableNumber: number;
   tableName: string;
-  pinCode: string;
   status: 'active' | 'idle' | 'maintenance' | 'IN_MATCH' | 'AVAILABLE' | string;
   isLocked: boolean;
-  activeMatch?: any;
+}
+
+const DEVICE_ID_STORAGE_KEY = 'siredom_device_id';
+
+function getOrCreateDeviceId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, id);
+  }
+  return id;
 }
 
 export default function PlayPortalPage() {
@@ -21,45 +32,52 @@ export default function PlayPortalPage() {
 
   const [tables, setTables] = useState<TableMasterItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<TableMasterItem | null>(null);
   const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
-  const [tenantCode, setTenantCode] = useState('TAB-SLOWBAR');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [tenantCode, setTenantCode] = useState('');
 
   const fetchTables = async () => {
+    const code = tenantCode.trim();
+    if (!code) {
+      setFetchError('Masukkan Kode Penyelenggara terlebih dahulu');
+      setTables([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
+    setFetchError(null);
     try {
-      const res = await fetch(`/api/matches?tenantCode=${encodeURIComponent(tenantCode)}`);
+      const res = await fetch(`/api/matches?tenantCode=${encodeURIComponent(code)}`);
       const json = await res.json();
-      if (json.masterTables && Array.isArray(json.masterTables)) {
+      if (json.masterTables && Array.isArray(json.masterTables) && json.masterTables.length > 0) {
         setTables(json.masterTables);
       } else {
-        setTables([
-          { id: '1', tableNumber: 1, tableName: 'Meja 01', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-          { id: '2', tableNumber: 2, tableName: 'Meja 02', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-          { id: '3', tableNumber: 3, tableName: 'Meja 03', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-          { id: '4', tableNumber: 4, tableName: 'Meja 04', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-        ]);
+        setTables([]);
+        setFetchError(json.message || json.error || `Penyelenggara "${code}" belum memiliki meja terdaftar`);
       }
     } catch (err) {
       console.error('Failed to fetch tables:', err);
-      setTables([
-        { id: '1', tableNumber: 1, tableName: 'Meja 01', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-        { id: '2', tableNumber: 2, tableName: 'Meja 02', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-        { id: '3', tableNumber: 3, tableName: 'Meja 03', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-        { id: '4', tableNumber: 4, tableName: 'Meja 04', pinCode: '1234', status: 'AVAILABLE', isLocked: false },
-      ]);
+      setTables([]);
+      setFetchError('Gagal terhubung ke server. Periksa koneksi lalu coba lagi.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTables();
-  }, [tenantCode]);
+    if (!tenantCode.trim()) {
+      setTables([]);
+      setIsLoading(false);
+      setFetchError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleNumpadPress = (digit: string) => {
-    setPinError(false);
+    setPinError(null);
     if (digit === 'CLEAR') {
       setPinInput('');
     } else if (digit === 'DEL') {
@@ -73,26 +91,39 @@ export default function PlayPortalPage() {
     }
   };
 
-  const verifyPin = (pin: string, table: TableMasterItem) => {
-    const validPin = table.pinCode || '1234';
-    if (pin === validPin || pin === '1234') {
-      setAuth(true, 'wasit', tenantCode, table.tableNumber);
-      fetch(`/api/matches?tenantCode=${encodeURIComponent(tenantCode)}&tableId=${table.id}`)
-        .then((res) => res.json())
-        .then((json) => {
-          const hasMatch = json.status === 'success' && json.data;
-          const targetPath = hasMatch ? `/play/live/${table.id}` : `/play/live/${table.id}/setup`;
-          router.push(targetPath);
-        })
-        .catch(() => {
-          router.push(`/play/live/${table.id}/setup`);
-        });
-    } else {
-      setPinError(true);
+  // Verifikasi dilakukan sepenuhnya di server (pinCode tidak pernah dikirim ke klien).
+  const verifyPin = async (pin: string, table: TableMasterItem) => {
+    setIsVerifying(true);
+    setPinError(null);
+    try {
+      const res = await verifyTablePinAction({
+        tenantCode: tenantCode.trim(),
+        tableNumber: table.tableNumber,
+        pin,
+        deviceId: getOrCreateDeviceId(),
+      });
+
+      if (!res.success) {
+        setPinError(res.error || 'PIN Meja salah. Coba lagi.');
+        setTimeout(() => {
+          setPinInput('');
+          setPinError(null);
+        }, 1200);
+        return;
+      }
+
+      setAuth(true, res.role || 'wasit', res.tenantCode || '', res.tableNumber || table.tableNumber);
+
+      const targetPath = res.hasActiveMatch ? `/play/live/${res.tableId}` : `/play/live/${res.tableId}/setup`;
+      router.push(targetPath);
+    } catch (err: any) {
+      setPinError(err?.message || 'Gagal memverifikasi PIN. Coba lagi.');
       setTimeout(() => {
         setPinInput('');
-        setPinError(false);
-      }, 800);
+        setPinError(null);
+      }, 1200);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -121,14 +152,32 @@ export default function PlayPortalPage() {
 
       {/* Tenant Code Input */}
       <div className="max-w-4xl mx-auto w-full md:w-full mb-4">
-        <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">KODE TENANT</label>
-        <input
-          type="text"
-          value={tenantCode}
-          onChange={(e) => setTenantCode(e.target.value.toUpperCase())}
-          placeholder="TAB-SLOWBAR"
-          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-extrabold focus:outline-none focus:border-cyan-500 uppercase text-sm md:text-base"
-        />
+        <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">KODE PENYELENGGARA</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={tenantCode}
+            onChange={(e) => setTenantCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setSelectedTable(null);
+                fetchTables();
+              }
+            }}
+            placeholder="CONTOH: TAB-SLOWBAR"
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-extrabold focus:outline-none focus:border-cyan-500 uppercase text-sm md:text-base"
+          />
+          <button
+            onClick={() => {
+              setSelectedTable(null);
+              fetchTables();
+            }}
+            disabled={!tenantCode.trim() || isLoading}
+            className="px-4 md:px-6 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white text-xs md:text-sm font-black uppercase tracking-wider transition-colors shrink-0"
+          >
+            Cari
+          </button>
+        </div>
       </div>
 
       {/* Main Content Area - Stacked on mobile, side-by-side on tablet/desktop */}
@@ -147,6 +196,12 @@ export default function PlayPortalPage() {
               <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-[11px] md:text-xs text-slate-400">Memuat status meja...</p>
             </div>
+          ) : fetchError ? (
+            <div className="p-6 md:p-10 text-center bg-slate-900/60 border border-slate-800 rounded-2xl md:rounded-3xl space-y-3 font-mono">
+              <Lock className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-[11px] md:text-xs text-amber-400">{fetchError}</p>
+              <p className="text-[10px] text-slate-500">Masukkan Kode Penyelenggara yang valid, lalu tekan Cari.</p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-3.5 font-mono">
               {tables.map((table) => {
@@ -159,7 +214,7 @@ export default function PlayPortalPage() {
                     onClick={() => {
                       setSelectedTable(table);
                       setPinInput('');
-                      setPinError(false);
+                      setPinError(null);
                     }}
                     className={`p-4 md:p-5 rounded-xl md:rounded-3xl border-2 text-left transition-all relative overflow-hidden group ${isSelected
                       ? 'bg-gradient-to-br from-cyan-950 to-slate-900 border-cyan-500 ring-2 ring-cyan-500/20 md:ring-4 shadow-xl'
@@ -224,8 +279,8 @@ export default function PlayPortalPage() {
           </div>
 
           {pinError && (
-            <div className="text-center text-[10px] md:text-xs font-bold text-rose-400 font-mono animate-bounce">
-              ✕ PIN Salah. Coba lagi (PIN Default: 1234)
+            <div className="text-center text-[10px] md:text-xs font-bold text-rose-400 font-mono animate-bounce px-1">
+              ✕ {pinError}
             </div>
           )}
 
@@ -236,7 +291,7 @@ export default function PlayPortalPage() {
               return (
                 <button
                   key={btn}
-                  disabled={!selectedTable}
+                  disabled={!selectedTable || isVerifying}
                   onClick={() => handleNumpadPress(btn)}
                   className={`h-12 md:h-14 rounded-xl md:rounded-2xl font-black text-base md:text-lg transition-all flex items-center justify-center disabled:opacity-30 ${isActionBtn ? 'bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 text-[10px] md:text-xs' : 'bg-slate-950 hover:bg-cyan-950 border border-slate-800 hover:border-cyan-700 text-white text-xl md:text-2xl active:scale-95 shadow-md'}`}
                 >
@@ -250,7 +305,7 @@ export default function PlayPortalPage() {
 
       {/* Footer info */}
       <div className="max-w-4xl mx-auto w-full text-center text-xs text-slate-500 font-mono border-t border-slate-900 pt-4">
-        SIREDOM v2.0 Sistem Rekapitulasi Domino • Tenant TAB-SLOWBAR
+        SIREDOM v2.0 Sistem Rekapitulasi Domino
       </div>
     </div>
   );

@@ -4,7 +4,8 @@
 import { prisma } from '@/lib/prisma';
 import { broadcastRoundCommitted } from '@/lib/supabase';
 import { getRulesetEngine } from './engine/RulesetEngineFactory';
-import { ActionType, RoundStatusTag, TeamIdentifier, RulesetMode, MatchCategory } from '@/types/domino';
+import { ActionType, RoundStatusTag, TeamIdentifier, RulesetMode, MatchCategory, PlayersDataDocument, RoundsHistoryDocument } from '@/types/domino';
+import { Prisma } from '@prisma/client';
 
 export interface CommitRoundInput {
   matchId: string;
@@ -26,12 +27,13 @@ export interface CommitRoundInput {
 export interface ApplyPenaltyInput {
   matchId: string;
   offenderPlayerId: string;
-  penaltyAmount: 1 | 4;
+  penaltyAmount: 1 | 3 | 4; // Pasal 14: +1 ringan / +3 turun ganda / +4 passed palsu
 }
 
 export interface SetupMatchInput {
   matchId?: string;
   tenantCode?: string;
+  tableId?: string;
   tableNumber?: number;
   rulesetMode?: RulesetMode;
   matchCategory?: MatchCategory;
@@ -42,6 +44,7 @@ export interface SetupMatchInput {
   rulesConfig?: any;
   oradoConfig?: any;
   players: { seatNumber: 1 | 2 | 3 | 4; name: string }[];
+  deviceId?: string;
 }
 
 export async function commitRoundAction(input: CommitRoundInput) {
@@ -66,8 +69,8 @@ export async function commitRoundAction(input: CommitRoundInput) {
     const normalizedActionType = (String(actionType).toUpperCase() as ActionType) || 'MENANG_BIASA';
     const normalizedWinnerTeam = (winnerTeam as TeamIdentifier) || 'NONE';
 
-    const existingPlayers: any[] = Array.isArray(matchSession.playersData) ? (matchSession.playersData as any[]) : [];
-    const existingRounds: any[] = Array.isArray(matchSession.roundsHistory) ? (matchSession.roundsHistory as any[]) : [];
+    const existingPlayers: PlayersDataDocument = Array.isArray(matchSession.playersData) ? (matchSession.playersData as unknown as PlayersDataDocument) : [];
+    const existingRounds: RoundsHistoryDocument = Array.isArray(matchSession.roundsHistory) ? (matchSession.roundsHistory as unknown as RoundsHistoryDocument) : [];
 
     // Find real CUID or seat Number for winner & victim
     let dbWinnerId = winnerPlayerId;
@@ -87,8 +90,8 @@ export async function commitRoundAction(input: CommitRoundInput) {
     const calculationResult = engine.calculateRound({
       rulesetMode: matchSession.rulesetMode,
       matchCategory: matchSession.matchCategory,
-      rulesConfig: (matchSession.rulesConfig as any) || {},
-      pointsConfig: (matchSession.pointsConfig as any) || undefined,
+      rulesConfig: (matchSession.rulesConfig as unknown as Record<string, unknown>) || {},
+      pointsConfig: (matchSession.pointsConfig as unknown as import('@/types/domino').PointsConfig) || undefined,
       winnerPlayerId: dbWinnerId,
       winnerTeam: normalizedWinnerTeam,
       actionType: normalizedActionType,
@@ -152,15 +155,28 @@ export async function commitRoundAction(input: CommitRoundInput) {
       };
     });
 
+    // Transisi set ORADO (devlog/0008): set dimenangkan tetapi match belum selesai
+    // → arsipkan skor set ke totalScore, lalu currentScore semua pemain mulai dari 0 lagi
+    // agar set berikutnya balapan segar menuju 101 (regulasi Best of 3).
+    const isSetTransition = Boolean((calculationResult as { setJustWon?: boolean }).setJustWon)
+      && !calculationResult.isMatchComplete;
+    const playersToPersist = isSetTransition
+      ? updatedPlayers.map((p) => ({
+          ...p,
+          totalScore: (p.totalScore ?? 0) + p.currentScore,
+          currentScore: 0,
+        }))
+      : updatedPlayers;
+
     const nextStatus = calculationResult.isMatchComplete ? 'COMPLETED' : 'IN_PROGRESS';
 
     // 5. Single-row atomic update on MatchSession
     const updatedSession = await prisma.matchSession.update({
       where: { id: matchSession.id },
       data: {
-        status: nextStatus as any,
-        playersData: updatedPlayers as any,
-        roundsHistory: [...existingRounds, newRound] as any,
+        status: nextStatus,
+        playersData: playersToPersist as unknown as Prisma.InputJsonValue,
+        roundsHistory: [...existingRounds, newRound] as unknown as Prisma.InputJsonValue,
         ...(calculationResult.newTargetValue && { targetValue: calculationResult.newTargetValue }),
         ...(calculationResult.currentSet !== undefined && { currentSet: calculationResult.currentSet }),
         ...(calculationResult.teamASetWins !== undefined && { teamASetWins: calculationResult.teamASetWins }),
@@ -193,8 +209,7 @@ export async function applyPenaltyAction(input: ApplyPenaltyInput) {
   });
 }
 
-export async function rollbackRoundAction(matchId: string) {
-  try {
+export async function rollbackRoundAction(matchId: string) {  try {
     const matchSession = await prisma.matchSession.findUnique({
       where: { id: matchId },
     });
@@ -203,13 +218,13 @@ export async function rollbackRoundAction(matchId: string) {
       return { status: 'error', message: 'Sesi pertandingan tidak ditemukan' };
     }
 
-    const existingRounds: any[] = Array.isArray(matchSession.roundsHistory) ? (matchSession.roundsHistory as any[]) : [];
+    const existingRounds: RoundsHistoryDocument = Array.isArray(matchSession.roundsHistory) ? (matchSession.roundsHistory as unknown as RoundsHistoryDocument) : [];
     if (existingRounds.length === 0) {
       return { status: 'error', message: 'Belum ada ronde yang dapat di-undo' };
     }
 
     const remainingRounds = existingRounds.slice(0, -1);
-    const existingPlayers: any[] = Array.isArray(matchSession.playersData) ? (matchSession.playersData as any[]) : [];
+    const existingPlayers: PlayersDataDocument = Array.isArray(matchSession.playersData) ? (matchSession.playersData as unknown as PlayersDataDocument) : [];
 
     // Recalculate player scores from remaining rounds
     const recalculatedPlayers = existingPlayers.map((p) => {
@@ -228,8 +243,8 @@ export async function rollbackRoundAction(matchId: string) {
       where: { id: matchId },
       data: {
         status: 'IN_PROGRESS',
-        playersData: recalculatedPlayers as any,
-        roundsHistory: remainingRounds as any,
+        playersData: recalculatedPlayers as unknown as Prisma.InputJsonValue,
+        roundsHistory: remainingRounds as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -247,20 +262,56 @@ export async function rollbackRoundAction(matchId: string) {
   }
 }
 
-export interface SetupMatchInput {
-  matchId?: string;
-  tableId?: string;
-  tenantCode?: string;
-  tableNumber?: number;
-  rulesetMode?: RulesetMode;
-  matchCategory?: MatchCategory;
-  matchMode?: 'rounds' | 'points' | 'ROUNDS' | 'POINTS';
-  targetType?: string;
-  targetValue?: number;
-  pointsConfig?: any;
-  rulesConfig?: any;
-  oradoConfig?: any;
-  players: { seatNumber: 1 | 2 | 3 | 4; name: string }[];
+/**
+ * Reset match = hapus seluruh riwayat ronde SAJA.
+ * Mode, kategori, target, dan identitas pemain (nama/kursi/tim) DIPERTAHANKAN;
+ * skor turunan ronde di-nol-kan sesuai invarian rekonstruksi dari roundsHistory (ADR-0001).
+ */
+export async function resetMatchRoundsAction(matchId: string) {
+  try {
+    const matchSession = await prisma.matchSession.findUnique({
+      where: { id: matchId },
+    });
+
+    if (!matchSession) {
+      return { status: 'error', message: 'Sesi pertandingan tidak ditemukan' };
+    }
+
+    const players: PlayersDataDocument = Array.isArray(matchSession.playersData)
+      ? (matchSession.playersData as unknown as PlayersDataDocument)
+      : [];
+
+    const resetPlayers = players.map((p) => ({
+      ...p,
+      currentScore: 0,
+      totalScore: 0,
+    }));
+
+    const updatedSession = await prisma.matchSession.update({
+      where: { id: matchId },
+      data: {
+        status: 'IN_PROGRESS',
+        winnerId: null,
+        currentSet: 1,
+        teamASetWins: 0,
+        teamBSetWins: 0,
+        playersData: resetPlayers as unknown as Prisma.InputJsonValue,
+        roundsHistory: [] as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await broadcastRoundCommitted(updatedSession.id, {
+      type: 'ROUND_COMMITTED',
+      matchId: updatedSession.id,
+      tableNumber: updatedSession.tableNumber,
+      match: updatedSession,
+    });
+
+    return { status: 'success', data: updatedSession };
+  } catch (error: any) {
+    console.error('Failed in resetMatchRoundsAction:', error);
+    return { status: 'error', message: error.message || 'Gagal melakukan reset pertandingan' };
+  }
 }
 
 export async function getActiveMatchByTableId(tableId: string) {
@@ -270,7 +321,7 @@ export async function getActiveMatchByTableId(tableId: string) {
         OR: [
           { id: tableId },
           { tableNumber: isNaN(Number(tableId)) ? undefined : Number(tableId) }
-        ].filter(Boolean) as any
+        ].filter(Boolean) as Prisma.TableMasterWhereInput[]
       }
     });
 
@@ -291,12 +342,40 @@ export async function getActiveMatchByTableId(tableId: string) {
   }
 }
 
+/**
+ * Sesi TERBARU pada meja apa pun statusnya (IN_PROGRESS / COMPLETED).
+ * Dipakai route guard /play/live agar wasit tetap bisa membuka meja yang
+ * barusan selesai (status COMPLETED) tanpa dilempar ke setup — devlog/0008.
+ */
+export async function getLatestMatchByTableId(tableId: string) {
+  try {
+    const table = await prisma.tableMaster.findFirst({
+      where: {
+        OR: [
+          { id: tableId },
+          { tableNumber: isNaN(Number(tableId)) ? undefined : Number(tableId) }
+        ].filter(Boolean) as Prisma.TableMasterWhereInput[]
+      }
+    });
+
+    if (!table) return null;
+
+    return await prisma.matchSession.findFirst({
+      where: { tableId: table.id },
+      orderBy: { createdAt: 'desc' }
+    });
+  } catch (error) {
+    console.error('Failed to fetch latest match by tableId:', error);
+    return null;
+  }
+}
+
 export async function setupMatchSessionAction(input: SetupMatchInput) {
   try {
     const {
       matchId,
       tableId,
-      tenantCode = 'TAB-SLOWBAR',
+      tenantCode,
       tableNumber = 1,
       rulesetMode = 'CASUAL',
       matchCategory = 'SINGLE_1V1V1V1',
@@ -307,7 +386,12 @@ export async function setupMatchSessionAction(input: SetupMatchInput) {
       rulesConfig,
       oradoConfig,
       players,
+      deviceId,
     } = input;
+
+    if (!tenantCode || !String(tenantCode).trim()) {
+      return { success: false, status: 'error', message: 'Kode Penyelenggara (tenantCode) wajib diisi' };
+    }
 
     // Find tenant
     const tenant = await prisma.tenant.findFirst({
@@ -332,16 +416,28 @@ export async function setupMatchSessionAction(input: SetupMatchInput) {
     });
 
     if (!table) {
+      const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
       table = await prisma.tableMaster.create({
         data: {
           tenantId: tenant.id,
           tableNumber: effectiveTableNumber,
           tableName: `Meja 0${effectiveTableNumber}`,
-          pinCode: '1234',
+          pinCode: generatedPin,
           status: 'IN_MATCH',
           isLocked: true,
         },
       });
+    }
+
+    // Single-device session locking: tolak hanya jika ada perangkat LAIN yang
+    // membawa deviceId berbeda dari pemegang lock. Klaim lock asli terjadi
+    // secara atomik saat verifikasi PIN (verifyTablePinAction).
+    if (table.isLocked && table.activeDeviceId && deviceId && table.activeDeviceId !== deviceId) {
+      return {
+        success: false,
+        status: 'error',
+        message: `Meja #${table.tableNumber} sedang dikunci oleh perangkat lain. Minta panitia melepas sesi (UNLOCK) terlebih dahulu.`,
+      };
     }
 
     const targetTableId = tableId || table.id;
@@ -401,8 +497,8 @@ export async function setupMatchSessionAction(input: SetupMatchInput) {
             teamBSetWins: 0,
             pointsConfig: pointsConfig || undefined,
             rulesConfig: rulesConfig || { pointsConfig, oradoConfig },
-            playersData: formattedPlayers as any,
-            roundsHistory: [] as any,
+            playersData: formattedPlayers as unknown as Prisma.InputJsonValue,
+            roundsHistory: [] as unknown as Prisma.InputJsonValue,
             status: 'IN_PROGRESS',
           },
         });
@@ -422,8 +518,8 @@ export async function setupMatchSessionAction(input: SetupMatchInput) {
             teamBSetWins: 0,
             pointsConfig: pointsConfig || undefined,
             rulesConfig: rulesConfig || { pointsConfig, oradoConfig },
-            playersData: formattedPlayers as any,
-            roundsHistory: [] as any,
+            playersData: formattedPlayers as unknown as Prisma.InputJsonValue,
+            roundsHistory: [] as unknown as Prisma.InputJsonValue,
             status: 'IN_PROGRESS',
           },
         });

@@ -2,7 +2,8 @@
 
 > **Manual Domain Knowledge & Ruleset Calculation Engine**  
 > **Sistem:** SIREDOM (Sistem Rekapitulasi Domino) v2.0  
-> **Cakupan Regulasi:** PB PORDI, PB ORADO, Casual Warkop (PRD v2.0 Aligned)
+> **Cakupan Regulasi:** PB PORDI, PB ORADO, Casual Warkop  
+> **Rujukan induk:** [`PRD.md`](./PRD.md) — matriks regulasi ringkas ada di sana; file ini memuat detail matematisnya.
 
 ---
 
@@ -133,8 +134,8 @@ $$\text{ScoreAfter}_{i} = \text{ScoreBefore}_{i} + \Delta\text{Points}_{i}$$
 
 ## 4. Mesin Kalkulasi Ulang (Recalculation & Rollback Engine)
 
-Jika terjadi *Rollback* atau koreksi data pada ronde masa lalu di halaman `/wasit/audit`:
+Jika terjadi *Rollback* atau koreksi data pada ronde masa lalu di halaman `/play/live/[tableId]/audit`:
 
-1. **State Snapshot Restorasi:** Sistem memuat snapshot skor sebelum ronde yang diedit ($t = N - 1$).
-2. **Sequential Re-evaluation:** Engine mengeksekusi ulang fungsi `calculateRound()` secara berurutan untuk ronde $N$ hingga ronde aktif terakhir dengan aturan ruleset yang sama.
-3. **Database & Realtime Broadcast:** Memperbarui tabel `RoundScore`, `Player.currentScore`, dan memancarkan event pembaruan ke `/admin/leaderboard-tv`.
+1. **Pembuangan Ronde Terakhir (LIFO):** Rollback membuang ronde paling akhir dari dokumen `roundsHistory`.
+2. **Rekonstruksi Skor:** Skor setiap pemain dihitung ulang dari sisa riwayat (akumulasi `pointsAwarded` miliknya), lalu ditulis kembali ke dokumen `playersData` — menjaga invarian bahwa skor akhir selalu dapat direkonstruksi dari riwayat ronde.
+3. **Database & Realtime Broadcast:** Dokumen `MatchSession` diperbarui dalam satu mutasi Prisma, dan event pembaruan dipancarkan ke `/admin/leaderboard-tv`.

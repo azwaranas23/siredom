@@ -85,13 +85,13 @@ export async function createTenantAction(input: CreateTenantInput) {
         },
       });
 
-      // Create Initial Master Table #1
+      // Create Initial Master Table #1 (PIN acak, bukan default)
       await tx.tableMaster.create({
         data: {
           tenantId: newTenant.id,
           tableNumber: 1,
           tableName: 'Meja Utama 01',
-          pinCode: '1234',
+          pinCode: Math.floor(1000 + Math.random() * 9000).toString(),
           status: 'active',
         },
       });

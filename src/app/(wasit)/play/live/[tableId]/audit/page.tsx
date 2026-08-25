@@ -12,7 +12,7 @@ interface PageProps {
 
 export default function TableAuditPage({ params }: PageProps) {
   const { tableId } = use(params);
-  const { match, rollbackLastRound, resetMatch } = useScorerStore();
+  const { match, rollbackLastRound, resetMatchOnServer } = useScorerStore();
 
   const handleRollback = () => {
     if (confirm('Apakah Anda yakin ingin membatalkan (rollback) ronde terakhir? Skor kumulatif akan dihitung ulang secara otomatis.')) {
@@ -20,9 +20,10 @@ export default function TableAuditPage({ params }: PageProps) {
     }
   };
 
-  const handleResetFullMatch = () => {
-    if (confirm('PERINGATAN: Apakah Anda yakin ingin MERISET PERTANDINGAN SECARA KESELURUHAN? Semua riwayat ronde akan dihapus.')) {
-      resetMatch();
+  // Reset persisten: hapus riwayat ronde di DB; mode/kategori/target/identitas pemain dipertahankan.
+  const handleResetFullMatch = async () => {
+    if (confirm('PERINGATAN: Apakah Anda yakin ingin MERISET PERTANDINGAN SECARA KESELURUHAN? Semua riwayat ronde akan dihapus dari database (mode & pemain dipertahankan).')) {
+      await resetMatchOnServer();
     }
   };
 
@@ -47,7 +48,7 @@ export default function TableAuditPage({ params }: PageProps) {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-amber-800 disabled:opacity-50 text-amber-300 font-bold text-xs shadow-lg transition-all"
           >
             <RotateCcw className="w-4 h-4" />
-            ROLLBACK RONDE TERAKHIR (R#{match.rounds.length})
+            ROLLBACK RONDE TERAKHIR{match.rounds.length > 0 ? ` (R#${match.rounds.length})` : ''}
           </button>
 
           <button

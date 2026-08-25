@@ -9,7 +9,7 @@ interface PenaltyModalProps {
   onClose: () => void;
   players: Player[];
   matchCategory: MatchCategory;
-  onApplyPenalty: (offenderPlayerId: string, amount: 1 | 4) => void;
+  onApplyPenalty: (offenderPlayerId: string, amount: 1 | 3 | 4) => void;
 }
 
 export const PenaltyModal: React.FC<PenaltyModalProps> = ({
@@ -20,7 +20,7 @@ export const PenaltyModal: React.FC<PenaltyModalProps> = ({
   onApplyPenalty,
 }) => {
   const [selectedOffenderId, setSelectedOffenderId] = useState<string | null>(null);
-  const [penaltyAmount, setPenaltyAmount] = useState<1 | 4>(1);
+  const [penaltyAmount, setPenaltyAmount] = useState<1 | 3 | 4>(1);
 
   if (!isOpen) return null;
 
@@ -51,32 +51,45 @@ export const PenaltyModal: React.FC<PenaltyModalProps> = ({
 
         {/* Penalty Type Selector */}
         <div className="space-y-2">
-          <label className="block text-xs text-slate-400 font-bold uppercase">1. PILIH JENIS PELANGGARAN DENDA</label>
-          <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs text-slate-400 font-bold uppercase">1. PILIH JENIS PELANGGARAN DENDA (PASAL 14)</label>
+          <div className="grid grid-cols-3 gap-2.5">
             <button
               type="button"
               onClick={() => setPenaltyAmount(1)}
-              className={`p-3.5 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${
+              className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${
                 penaltyAmount === 1
                   ? 'bg-amber-950/90 border-amber-500 text-amber-300 ring-2 ring-amber-500/30'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              <span className="text-xl font-black mb-1">+1 POIN</span>
-              <span className="text-[10px] uppercase font-bold text-slate-300">Pelanggaran Ringan</span>
+              <span className="text-lg font-black mb-1">+1</span>
+              <span className="text-[9px] uppercase font-bold text-slate-300 leading-tight">Ringan / Tanya di Luar Giliran</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPenaltyAmount(3)}
+              className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${
+                penaltyAmount === 3
+                  ? 'bg-orange-950/90 border-orange-500 text-orange-300 ring-2 ring-orange-500/30'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="text-lg font-black mb-1">+3</span>
+              <span className="text-[9px] uppercase font-bold text-slate-300 leading-tight">Kartu Turun Dua Sekaligus</span>
             </button>
 
             <button
               type="button"
               onClick={() => setPenaltyAmount(4)}
-              className={`p-3.5 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${
+              className={`p-3 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${
                 penaltyAmount === 4
                   ? 'bg-rose-950/90 border-rose-500 text-rose-300 ring-2 ring-rose-500/30'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              <span className="text-xl font-black mb-1">+4 POIN</span>
-              <span className="text-[10px] uppercase font-bold text-slate-300">Passed Palsu / Berat</span>
+              <span className="text-lg font-black mb-1">+4</span>
+              <span className="text-[9px] uppercase font-bold text-slate-300 leading-tight">Passed Palsu</span>
             </button>
           </div>
         </div>

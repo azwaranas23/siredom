@@ -1,13 +1,26 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { PublicTableInfo } from '@/types/domino';
+
+function generatePin(): string {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const tenantCode = searchParams.get('tenantCode') || 'TAB-SLOWBAR';
+    const tenantCode = searchParams.get('tenantCode');
+
+    // Tenant code wajib — tidak ada fallback hardcoded.
+    if (!tenantCode || !tenantCode.trim()) {
+      return NextResponse.json(
+        { status: 'error', message: 'Parameter tenantCode wajib diisi' },
+        { status: 400 }
+      );
+    }
 
     const tenant = await prisma.tenant.findUnique({
-      where: { code: tenantCode.toUpperCase() },
+      where: { code: tenantCode.trim().toUpperCase() },
       include: {
         tableMasters: {
           orderBy: { tableNumber: 'asc' },
@@ -19,7 +32,17 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: 'error', message: 'Tenant tidak ditemukan' }, { status: 404 });
     }
 
-    return NextResponse.json({ status: 'success', data: tenant.tableMasters });
+    // Respons aman untuk klien publik: TANPA pinCode.
+    const publicTables: PublicTableInfo[] = tenant.tableMasters.map((t) => ({
+      id: t.id,
+      tableNumber: t.tableNumber,
+      tableName: t.tableName,
+      status: t.status,
+      isLocked: t.isLocked,
+      activeDeviceId: t.activeDeviceId,
+    }));
+
+    return NextResponse.json({ status: 'success', data: publicTables });
   } catch (error: any) {
     console.error('Failed to fetch tables:', error);
     return NextResponse.json(
@@ -34,8 +57,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { tenantCode, tableNumber, tableName, pinCode } = body;
 
+    if (!tenantCode || !String(tenantCode).trim()) {
+      return NextResponse.json(
+        { status: 'error', message: 'Kode Tenant wajib diisi' },
+        { status: 400 }
+      );
+    }
+
     const tenant = await prisma.tenant.findUnique({
-      where: { code: (tenantCode || 'TAB-SLOWBAR').toUpperCase() },
+      where: { code: String(tenantCode).trim().toUpperCase() },
     });
 
     if (!tenant) {
@@ -43,7 +73,7 @@ export async function POST(req: Request) {
     }
 
     const tableNum = Number(tableNumber) || 1;
-    const pin = pinCode || '1234';
+    const pin = pinCode ? String(pinCode) : generatePin(); // PIN acak jika tidak disediakan
     const name = tableName || `Meja Utama ${tableNum < 10 ? '0' + tableNum : tableNum}`;
 
     const newTable = await prisma.tableMaster.create({

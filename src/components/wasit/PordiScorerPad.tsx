@@ -9,6 +9,7 @@ import { WinnerActionModal } from '@/components/wasit/WinnerActionModal';
 import { TangkapModal } from '@/components/wasit/TangkapModal';
 import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
 import { PenaltyModal } from '@/components/wasit/PenaltyModal';
+import TimedomiPanel from '@/components/wasit/TimedomiPanel';
 import { RotateCcw, AlertOctagon, Undo2 } from 'lucide-react';
 
 interface PordiScorerPadProps {
@@ -44,6 +45,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     getTeamAScore,
     getTeamBScore,
     getRankedPlayers,
+    getLast5RoundHistory,
   } = useScorerStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     setToastTimer(timer);
   };
 
-  const handleApplyPenalty = async (offenderPlayerId: string, amount: 1 | 4) => {
+  const handleApplyPenalty = async (offenderPlayerId: string, amount: 1 | 3 | 4) => {
     const roundNumBefore = match.rounds.length + 1;
     const committedRound = await applyFastPenalty(offenderPlayerId, amount);
 
@@ -145,6 +147,10 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           <span className="text-amber-200 font-bold">
             🏆 {targetLabel}
           </span>
+          <span className="text-slate-500">•</span>
+          <span className="text-white font-extrabold">
+            RONDE #{match.rounds.length + 1}
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -163,6 +169,9 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           </button>
         </div>
       </div>
+
+      {/* Timedomi — Stopwatch Digital khusus PB PORDI (PRD 2.2/4.3, devlog/0008) */}
+      <TimedomiPanel />
 
       {/* Team Header if TEAM_2V2 */}
       {isTeamMatch && (
@@ -184,6 +193,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           const seatInfo = getSeatInfo(player.seatNumber);
           const isSelected = selectedWinnerId === player.id;
           const isQuickPenaltyTarget = quickPenaltyPlayerId === player.id;
+          const historyList = getLast5RoundHistory(player.id);
 
           return (
             <div
@@ -231,24 +241,33 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
                   <div className="text-xs font-extrabold text-rose-400 uppercase font-mono text-center">
                     PENALTY DENDA CEPAT WASIT
                   </div>
-                  <div className="grid grid-cols-2 gap-2 font-mono">
+                  <div className="grid grid-cols-3 gap-2 font-mono">
                     <button
                       onClick={() => {
                         handleApplyPenalty(player.id, 1);
                         setQuickPenaltyPlayerId(null);
                       }}
-                      className="p-2.5 bg-amber-950 hover:bg-amber-900 border border-amber-700 rounded-xl text-amber-300 font-extrabold text-xs"
+                      className="p-2 bg-amber-950 hover:bg-amber-900 border border-amber-700 rounded-xl text-amber-300 font-extrabold text-[11px]"
                     >
-                      +1 Denda Ringan
+                      +1 Ringan
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleApplyPenalty(player.id, 3);
+                        setQuickPenaltyPlayerId(null);
+                      }}
+                      className="p-2 bg-orange-950 hover:bg-orange-900 border border-orange-700 rounded-xl text-orange-300 font-extrabold text-[11px]"
+                    >
+                      +3 Turun 2
                     </button>
                     <button
                       onClick={() => {
                         handleApplyPenalty(player.id, 4);
                         setQuickPenaltyPlayerId(null);
                       }}
-                      className="p-2.5 bg-rose-950 hover:bg-rose-900 border border-rose-700 rounded-xl text-rose-300 font-extrabold text-xs"
+                      className="p-2 bg-rose-950 hover:bg-rose-900 border border-rose-700 rounded-xl text-rose-300 font-extrabold text-[11px]"
                     >
-                      +4 Passed Palsu
+                      +4 Passed
                     </button>
                   </div>
                 </div>
@@ -263,6 +282,23 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
                   </div>
                 </div>
               )}
+
+              {/* Bottom Row: 5 Ronde History Pills (paritas dengan Casual — devlog/0006) */}
+              <div className="border-t border-slate-800/80 pt-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none font-mono text-xs">
+                <span className="text-[10px] text-slate-500 font-bold uppercase shrink-0">5 RONDE:</span>
+                {historyList.length === 0 ? (
+                  <span className="text-[10px] text-slate-600 italic">Belum ada ronde</span>
+                ) : (
+                  historyList.map((h, i) => (
+                    <span
+                      key={i}
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border flex items-center gap-1 shrink-0 ${h.statusClass}`}
+                    >
+                      {h.icon} R{h.roundNumber || i + 1}
+                    </span>
+                  ))
+                )}
+              </div>
 
               {/* Bottom Cue Text */}
               <div className="text-center text-xs text-slate-500 font-mono py-1 border-t border-slate-800/60 font-bold group-hover:text-amber-300 transition-colors">
@@ -286,7 +322,9 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           isOpen={true}
           onClose={resetFSM}
           onSuccess={(round, actionType, winnerName) => {
-            triggerUndoToast(match.rounds.length, winnerName);
+            // devlog/0006: pakai roundNumber dari ronde yang baru di-commit
+            // (match dari closure render lama = stale, menyebabkan "Ronde #0").
+            triggerUndoToast(round.roundNumber ?? 1, winnerName);
             setVictoryOverlayData({
               actionType,
               winnerName,
@@ -301,7 +339,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           isOpen={true}
           onClose={resetFSM}
           onSuccess={(round, actionType, winnerName) => {
-            triggerUndoToast(match.rounds.length, winnerName);
+            triggerUndoToast(round.roundNumber ?? 1, winnerName);
             setVictoryOverlayData({
               actionType,
               winnerName,
