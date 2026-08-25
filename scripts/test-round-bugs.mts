@@ -285,8 +285,70 @@ async function loopC() {
   }
 }
 
+// ── Loop D: pelepasan kunci meja saat logout (Ticket GH #1) ──
+async function loopD() {
+  if (process.env.RUN_DB_TESTS !== '1') return;
+  console.log('--- Loop D: session lock release on logout ---');
+
+  const mod: any = await import('../src/app/actions/tableActions');
+  const { prisma } = await import('../src/lib/prisma');
+
+  check('releaseTableSessionAction tersedia di tableActions', async () => {
+    assert.equal(typeof mod.releaseTableSessionAction, 'function', 'releaseTableSessionAction belum ada');
+  });
+  if (typeof mod.releaseTableSessionAction !== 'function') return;
+
+  const tenant = await prisma.tenant.findFirst({ where: { code: 'TAB-SLOWBAR' } });
+  assert.ok(tenant, 'tenant seed tidak ditemukan');
+  const table = await prisma.tableMaster.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { tableNumber: 'asc' },
+  });
+  assert.ok(table, 'tidak ada meja untuk tenant seed');
+
+  // Simpan state awal untuk restorasi
+  const original = { isLocked: table.isLocked, activeDeviceId: table.activeDeviceId };
+
+  // Fixture: meja dikunci oleh perangkat dev-ABC
+  await prisma.tableMaster.update({
+    where: { id: table.id },
+    data: { isLocked: true, activeDeviceId: 'dev-ABC', status: 'IN_MATCH' },
+  });
+
+  try {
+    const wrong: any = await mod.releaseTableSessionAction({ tableId: table.id, deviceId: 'dev-SALAH' });
+    check('perangkat salah → tolak, meja TETAP terkunci', () => {
+      assert.notEqual(wrong?.status, 'success');
+    });
+
+    const stillLocked = await prisma.tableMaster.findUnique({ where: { id: table.id } });
+    check('DB mempertahankan kunci setelah percobaan perangkat salah', () => {
+      assert.equal(stillLocked?.isLocked, true);
+      assert.equal(stillLocked?.activeDeviceId, 'dev-ABC');
+    });
+
+    const right: any = await mod.releaseTableSessionAction({ tableId: table.id, deviceId: 'dev-ABC' });
+    check('perangkat pemilik sesi → sukses unlock', () => assert.equal(right?.status, 'success'));
+
+    const unlocked = await prisma.tableMaster.findUnique({ where: { id: table.id } });
+    check('DB: isLocked=false & activeDeviceId null', () => {
+      assert.equal(unlocked?.isLocked, false);
+      assert.equal(unlocked?.activeDeviceId, null);
+    });
+
+    check('status meja kembali active', () => assert.equal(unlocked?.status, 'active'));
+  } finally {
+    await prisma.tableMaster.update({
+      where: { id: table.id },
+      data: { isLocked: original.isLocked, activeDeviceId: original.activeDeviceId },
+    }).catch(() => {});
+    await prisma.$disconnect();
+  }
+}
+
 await loopB();
 await loopC();
+await loopD();
 
 console.log(failures === 0 ? '\nALL GREEN' : `\n${failures} assertion(s) FAILED (loop merah)`);
 process.exit(failures === 0 ? 0 : 1);

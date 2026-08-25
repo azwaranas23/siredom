@@ -147,3 +147,13 @@ export async function issueSessionCookie(payload: { role: 'superadmin' | 'admin'
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
+
+/**
+ * Hapus cookie sesi (Ticket GH #1): bagian server dari alur logout.
+ * httpOnly cookie tidak bisa dihapus dari klien, jadi wajib via Server Action ini.
+ */
+export async function clearSessionCookieAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
+  return { success: true };
+}

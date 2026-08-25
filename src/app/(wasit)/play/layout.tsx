@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useParams } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
+import { releaseTableSessionAction } from '@/app/actions/tableActions';
+import { clearSessionCookieAction } from '@/app/actions/authActions';
+import { getOrCreateDeviceId } from '@/lib/device';
 import { Radio, SlidersHorizontal, FileText, History, LogOut, Maximize2, Minimize2, Menu, X, Dices } from 'lucide-react';
 
 export default function PlayLayout({ children }: { children: React.ReactNode }) {
@@ -40,7 +43,31 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const handleLogout = () => {
+  // Logout lengkap (Ticket GH #1): lepas kunci meja di DB → hapus cookie sesi
+  // httpOnly (wajib via Server Action) → bersihkan state lokal → keluar.
+  const handleLogout = async () => {
+    const deviceId = getOrCreateDeviceId();
+    const isUuid = !/^\d+$/.test(rawTableId);
+
+    try {
+      if (deviceId) {
+        await releaseTableSessionAction({
+          tableId: isUuid ? rawTableId : undefined,
+          tenantCode: tenantCode || undefined,
+          tableNumber: Number(tableNumber) || 1,
+          deviceId,
+        });
+      }
+    } catch (err) {
+      console.error('Gagal melepas kunci meja saat logout:', err);
+    }
+
+    try {
+      await clearSessionCookieAction();
+    } catch (err) {
+      console.error('Gagal menghapus cookie sesi:', err);
+    }
+
     logout();
     router.push('/play');
   };

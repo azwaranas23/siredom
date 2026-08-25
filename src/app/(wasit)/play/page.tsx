@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
 import { verifyTablePinAction } from '@/app/actions/tableActions';
+import { getOrCreateDeviceId } from '@/lib/device';
 import { Dices, Lock, ShieldCheck, RefreshCw } from 'lucide-react';
 
 interface TableMasterItem {
@@ -12,18 +13,6 @@ interface TableMasterItem {
   tableName: string;
   status: 'active' | 'idle' | 'maintenance' | 'IN_MATCH' | 'AVAILABLE' | string;
   isLocked: boolean;
-}
-
-const DEVICE_ID_STORAGE_KEY = 'siredom_device_id';
-
-function getOrCreateDeviceId(): string {
-  if (typeof window === 'undefined') return '';
-  let id = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, id);
-  }
-  return id;
 }
 
 export default function PlayPortalPage() {

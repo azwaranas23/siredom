@@ -21,6 +21,67 @@ export interface VerifyTablePinResult {
   lockedByOtherDevice?: boolean;
 }
 
+export interface ReleaseTableSessionResult {
+  status: 'success' | 'error';
+  message?: string;
+}
+
+/**
+ * Melepas kunci sesi meja saat wasit logout (Ticket GH #1).
+ * Hanya perangkat PEMILIK kunci (activeDeviceId cocok) yang boleh melepas —
+ * mencegah perangkat lain membajak lewat endpoint ini.
+ * Identifikasi meja: tableId langsung, atau fallback tenantCode + tableNumber.
+ * Sengaja TIDAK menyentuh cookies() agar tetap bisa diuji di luar runtime Next.
+ */
+export async function releaseTableSessionAction(input: {
+  tableId?: string;
+  tenantCode?: string;
+  tableNumber?: number;
+  deviceId: string;
+}): Promise<ReleaseTableSessionResult> {
+  try {
+    const deviceId = String(input.deviceId || '').trim();
+    if (!deviceId || (!input.tableId && !(input.tenantCode && input.tableNumber))) {
+      return { status: 'error', message: 'deviceId dan (tableId | tenantCode+tableNumber) wajib diisi' };
+    }
+
+    let tableId = input.tableId;
+    if (!tableId) {
+      const table = await prisma.tableMaster.findFirst({
+        where: {
+          tableNumber: Number(input.tableNumber),
+          tenant: { code: String(input.tenantCode).trim().toUpperCase() },
+        },
+        select: { id: true },
+      });
+      if (!table) return { status: 'error', message: 'Meja tidak ditemukan' };
+      tableId = table.id;
+    }
+
+    const released = await prisma.tableMaster.updateMany({
+      where: {
+        id: tableId,
+        isLocked: true,
+        activeDeviceId: deviceId,
+      },
+      data: {
+        isLocked: false,
+        activeDeviceId: null,
+        status: 'active',
+      },
+    });
+
+    if (released.count === 0) {
+      return { status: 'error', message: 'Sesi lock bukan milik perangkat ini atau meja tidak terkunci' };
+    }
+
+    return { status: 'success' };
+  } catch (error: any) {
+    console.error('releaseTableSessionAction Error:', error);
+    return { status: 'error', message: error.message || 'Gagal melepas sesi meja' };
+  }
+}
+
 /**
  * Verifikasi PIN meja secara server-side (tanpa membocorkan pinCode ke klien),
  * lalu mengklaim session lock secara ATOMIK untuk satu perangkat.
