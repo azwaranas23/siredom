@@ -5,6 +5,7 @@ import { useScorerStore } from '@/store/useScorerStore';
 import confetti from 'canvas-confetti';
 import { Trophy, ChevronRight, X, Sparkles, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PipMotif from '@/components/wasit/PipMotif';
 
 interface Props {
   isOpen: boolean;
@@ -131,6 +132,9 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block font-sans">
                   MEDALI PEMENANG JUARA 1
                 </span>
+                <div className="flex justify-center my-1.5">
+                  <PipMotif count={7} accent="pordi" size="md" />
+                </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white font-display tracking-tight">
                   {matchWinner?.name || 'Pemain'}
                 </h2>
