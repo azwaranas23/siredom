@@ -7,6 +7,7 @@ import { VictoryAnimationOverlay } from '@/components/wasit/VictoryAnimationOver
 import { WinnerActionModal } from '@/components/wasit/WinnerActionModal';
 import { TangkapModal } from '@/components/wasit/TangkapModal';
 import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
+import TeamQuadGrid from '@/components/wasit/TeamQuadGrid';
 import { RotateCcw, Undo2, Pencil, Settings, Flame, Trophy } from 'lucide-react';
 
 interface CasualScorerPadProps {
@@ -257,7 +258,15 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
         </div>
       </div>
 
-      {/* 4 Quadrants Player Grid matching Image 2 */}
+      {match.matchCategory === 'TEAM_2V2' ? (
+        /* Layout 2 kuadran tim untuk Ganda — paritas ORADO */
+        <TeamQuadGrid
+          players={match.players}
+          matchCategory={match.matchCategory}
+          onSelectMember={(playerId) => selectWinnerPlayer(playerId)}
+        />
+      ) : (
+      /* 4 Quadrants Player Grid for Tunggal */
       <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3.5 p-3 min-h-0">
         {displayPlayers.map((player) => {
           const dynamicRank = rankedPlayers.findIndex((rp) => rp.id === player.id) + 1 || player.seatNumber;
@@ -332,6 +341,7 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
           );
         })}
       </div>
+      )}
 
       {/* Bottom Sheet Winner Action Selection Modal (Step 1) */}
       <WinnerActionModal

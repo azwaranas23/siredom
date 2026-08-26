@@ -10,6 +10,7 @@ import { TangkapModal } from '@/components/wasit/TangkapModal';
 import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
 import { PenaltyModal } from '@/components/wasit/PenaltyModal';
 import TimedomiPanel from '@/components/wasit/TimedomiPanel';
+import TeamQuadGrid from '@/components/wasit/TeamQuadGrid';
 import { RotateCcw, AlertOctagon, Undo2 } from 'lucide-react';
 
 interface PordiScorerPadProps {
@@ -43,8 +44,6 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     resetFSM,
     rollbackLastRound,
     applyFastPenalty,
-    getTeamAScore,
-    getTeamBScore,
     getRankedPlayers,
     getLast5RoundHistory,
     setKandangContext,
@@ -62,8 +61,6 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
   } | null>(null);
 
   const rankedPlayers = getRankedPlayers();
-  const teamAScore = getTeamAScore();
-  const teamBScore = getTeamBScore();
 
   const isTeamMatch = match.matchCategory === 'TEAM_2V2';
   const targetLabel = isTeamMatch ? 'Race to 7 Poin (Ganda)' : 'Fixed 7 Ronde (Tunggal)';
@@ -174,21 +171,14 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
       {/* Timedomi — Stopwatch Digital khusus PB PORDI (PRD 2.2/4.3, devlog/0008) */}
       <TimedomiPanel />
 
-      {/* Team Header if TEAM_2V2 */}
-      {isTeamMatch && (
-        <div className="p-3 bg-slate-900/50 border-b border-slate-800 shrink-0">
-          <TeamScoreHeader
-            rulesetMode={match.rulesetMode}
-            matchCategory={match.matchCategory}
-            teamAScore={teamAScore}
-            teamBScore={teamBScore}
-            targetValue={7}
-            players={match.players}
-          />
-        </div>
-      )}
-
-      {/* Main Quadrant Display with PORDI Quick Penalty Floating Action */}
+      {/* Main Quadrant Display — TEAM_2V2 pakai TeamQuadGrid (2 kuadran, paritas ORADO) */}
+      {isTeamMatch ? (
+        <TeamQuadGrid
+          players={match.players}
+          matchCategory={match.matchCategory}
+          onSelectMember={(playerId) => selectWinnerPlayer(playerId)}
+        />
+      ) : (
       <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3.5 p-3 min-h-0">
         {match.players.map((player) => {
           const seatInfo = getSeatInfo(player.seatNumber);
@@ -252,6 +242,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           );
         })}
       </div>
+      )}
 
       {/* Bottom Sheet Winner Action Selection Modal — PB PORDI 2-level (Ticket GH#7) */}
       <PordiWinnerModal
