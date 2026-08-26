@@ -49,13 +49,13 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         onClick={onClose}
       />
 
-      {/* Centered Modal / Edge-to-Edge Bottom Sheet Drawer matching Image 2 */}
+      {/* Centered Modal / Edge-to-Edge Bottom Sheet Drawer — Ticket GH#16: horizontal 3 kolom */}
       <div className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#0d1527]/95 backdrop-blur-xl border-t border-slate-800/80 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] p-4 md:p-6 pb-6 animate-in slide-in-from-bottom duration-300">
         {/* Top Pill Handle Bar */}
         <div className="w-12 h-1 bg-slate-700/80 rounded-full mx-auto mb-4" />
 
         {/* Modal Header */}
-        <div className="relative max-w-3xl mx-auto mb-4 font-mono text-center">
+        <div className="relative max-w-4xl mx-auto mb-4 font-mono text-center">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div>
               <h2 className="text-lg md:text-xl font-black text-white font-sans tracking-wide uppercase text-left">
@@ -74,8 +74,8 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
           </div>
         </div>
 
-        {/* Player Status Rows matching Image 2 */}
-        <div className="space-y-3 max-w-3xl mx-auto mb-5 font-mono">
+        {/* Player Status Cards — Ticket GH#16: HORIZONTAL (landscape) / vertikal fallback */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto mb-5 font-mono">
           {remainingPlayers.map((player) => {
             const currentStatus = String(manualStatuses[player.id] || 'DUDUK').toUpperCase();
             const isBerdiri = currentStatus === 'BERDIRI';
@@ -84,55 +84,54 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
             return (
               <div
                 key={player.id}
-                className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3.5 px-4 flex items-center justify-between shadow-sm"
+                className={`bg-slate-900/90 border rounded-2xl p-3 shadow-sm space-y-2 transition-colors ${
+                  isBerdiri ? 'border-rose-800/70' : isDuduk ? 'border-blue-900/60' : 'border-slate-800/80'
+                }`}
               >
-                {/* Left: Seat Indicator Badge + Name */}
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-black font-mono px-2 py-0.5 rounded-lg bg-slate-950 text-slate-400 border border-slate-800">
-                    KURSI #{player.seatNumber}
+                {/* Seat badge + nama */}
+                <div className="flex items-center gap-2 px-0.5">
+                  <span className="text-[11px] font-black px-2 py-0.5 rounded-lg bg-slate-950 text-slate-400 border border-slate-800 shrink-0">
+                    K#{player.seatNumber}
                   </span>
-                  <span className="text-sm md:text-base font-extrabold text-white font-sans">
+                  <span className="text-sm font-extrabold text-white truncate">
                     {player.name}
                   </span>
                 </div>
 
-                {/* Right: Side-by-side DUDUK vs BERDIRI Buttons matching Image 2 */}
-                <div className="flex items-center gap-2">
-                  {/* DUDUK Button */}
-                  <button
-                    type="button"
-                    onClick={() => setManualPlayerStatus(player.id, 'DUDUK')}
-                    className={`rounded-xl px-4 py-2 min-w-[95px] flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black font-mono ${
-                      isDuduk
-                        ? 'bg-blue-950 text-blue-300 border-2 border-blue-700 shadow-md shadow-blue-950/50 scale-105'
-                        : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">🪑</span>
-                    <span>DUDUK</span>
-                  </button>
+                {/* DUDUK — full width dalam kartu */}
+                <button
+                  type="button"
+                  onClick={() => setManualPlayerStatus(player.id, 'DUDUK')}
+                  className={`w-full py-2.5 rounded-xl flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                    isDuduk
+                      ? 'bg-blue-950 text-blue-300 border-2 border-blue-700 shadow-md shadow-blue-950/50 scale-[1.02]'
+                      : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <span className="text-sm">🪑</span>
+                  <span>DUDUK</span>
+                </button>
 
-                  {/* BERDIRI Button */}
-                  <button
-                    type="button"
-                    onClick={() => setManualPlayerStatus(player.id, 'BERDIRI')}
-                    className={`rounded-xl px-4 py-2 min-w-[95px] flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black font-mono ${
-                      isBerdiri
-                        ? 'bg-rose-600 text-white border-2 border-rose-400 shadow-md shadow-rose-600/50 scale-105'
-                        : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-sm">😭</span>
-                    <span>BERDIRI</span>
-                  </button>
-                </div>
+                {/* BERDIRI — full width dalam kartu */}
+                <button
+                  type="button"
+                  onClick={() => setManualPlayerStatus(player.id, 'BERDIRI')}
+                  className={`w-full py-2.5 rounded-xl flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                    isBerdiri
+                      ? 'bg-rose-600 text-white border-2 border-rose-400 shadow-md shadow-rose-600/50 scale-[1.02]'
+                      : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <span className="text-sm">😭</span>
+                  <span>BERDIRI</span>
+                </button>
               </div>
             );
           })}
         </div>
 
         {/* Full-width Cyan Submit Button matching Image 2 */}
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <button
             onClick={handleConfirm}
             className="w-full py-4 rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-sm font-sans uppercase tracking-wider shadow-xl shadow-cyan-400/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.98] cursor-pointer"
