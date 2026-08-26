@@ -11,6 +11,26 @@
       radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 60%);
     background-attachment: fixed;
   }
+
+  /* Quality floor (devlog/0015 — Tier 2): keyboard focus selalu terlihat */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  [role="button"]:focus-visible {
+    @apply outline-none ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-950;
+  }
+
+  /* Hormati preferensi reduced-motion pengguna */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 /* Glassmorphism & Arcade Components */
