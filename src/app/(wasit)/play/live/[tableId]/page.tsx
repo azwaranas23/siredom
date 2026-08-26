@@ -25,7 +25,7 @@ export default async function LiveTablePage({ params }: PageProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-57px)] overflow-hidden">
+    <div className="flex-1 flex flex-col h-dvh overflow-hidden">
       <ScorerPadRenderer
         tableId={tableId}
         rulesetMode={latestMatch.rulesetMode as any}

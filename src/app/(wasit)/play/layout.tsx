@@ -17,12 +17,17 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isNavPanelOpen, setIsNavPanelOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const rawTableId = (params?.tableId as string) || String(tableNumber || 1);
-  
+
   // Display label: prefer numeric table number over UUID
   const displayTableLabel = /^\d+$/.test(rawTableId) ? `Meja #${rawTableId}` : `Meja #${tableNumber || 1}`;
+
+  // Ticket GH#15: rute live scorer saja -> immersive (navbar disembunyikan,
+  // dipanggil lewat chip mengambang). Setup/Audit/Riwayat tetap ber-navbar.
+  const isLiveScorer = /^\/play\/live\/[^/]+$/.test(pathname);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -90,6 +95,72 @@ export default function PlayLayout({ children }: { children: React.ReactNode }) 
 
   if (isPlayPortal) {
     return <div className="min-h-screen bg-slate-950 text-slate-100">{children}</div>;
+  }
+
+  // Ticket GH#15 — Immersive Live Scorer: navbar disembunyikan; chip pojok
+  // kanan-atas memanggil panel navigasi overlay. Pad mengisi seluruh layar.
+  if (isLiveScorer) {
+    return (
+      <div className="h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden">
+        {/* Floating summon chip */}
+        <button
+          onClick={() => setIsNavPanelOpen(!isNavPanelOpen)}
+          className="fixed top-3 right-3 z-50 p-2.5 rounded-full bg-slate-900/60 hover:bg-slate-800 border border-slate-700/70 text-slate-300 hover:text-white backdrop-blur-sm transition-colors shadow-lg"
+          title="Menu Navigasi"
+        >
+          {isNavPanelOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </button>
+
+        {/* Overlay nav panel */}
+        {isNavPanelOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsNavPanelOpen(false)} />
+            <div className="fixed top-14 right-3 z-50 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden font-mono text-xs animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-4 py-2.5 border-b border-slate-800">
+                <span className="font-extrabold text-white tracking-wide font-display">SIREDOM v2.0</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">
+                  {tenantCode || '—'} • {displayTableLabel}
+                </span>
+              </div>
+              {wasitLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsNavPanelOpen(false)}
+                    className={`w-full px-4 py-2.5 font-bold flex items-center gap-2 transition-colors ${
+                      isActive ? 'text-cyan-300 bg-cyan-950/50' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {link.label}
+                  </Link>
+                );
+              })}
+              <div className="border-t border-slate-800">
+                <button
+                  onClick={toggleFullscreen}
+                  className="w-full px-4 py-2.5 font-bold flex items-center gap-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  {isFullscreen ? 'Keluar Fullscreen' : 'Layar Penuh'}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full px-4 py-2.5 font-bold flex items-center gap-2 text-rose-300 hover:bg-rose-950/60 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" /> KELUAR MEJA
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        <main className="flex-1 flex flex-col min-h-0">{children}</main>
+      </div>
+    );
   }
 
   return (
