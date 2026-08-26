@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   content: [
@@ -13,6 +14,12 @@ const config: Config = {
           card: "#0b0f19",
           border: "#1f293d",
           accent: "#00f0ff",
+        },
+        // Token identitas per-mode (devlog/0015 — Tier 3)
+        mode: {
+          casual: { DEFAULT: "#22d3ee", soft: "#164e63", dim: "#0e7490" },
+          pordi: { DEFAULT: "#f59e0b", soft: "#78350f", dim: "#b45309" },
+          orado: { DEFAULT: "#a855f7", soft: "#581c87", dim: "#7e22ce" },
         },
         player: {
           red: {
@@ -38,7 +45,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ["system-ui", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
         mono: ["Consolas", "Monaco", "monospace"],
       },
 
@@ -71,6 +78,11 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Ticket GH#17 — varian `short:` untuk viewport pendek (HP landscape)
+    plugin(({ addVariant }: any) => {
+      addVariant("short", "@media (max-height: 480px)");
+    }),
+  ],
 };
 export default config;

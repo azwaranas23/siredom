@@ -8,6 +8,7 @@ import { WinnerActionModal } from '@/components/wasit/WinnerActionModal';
 import { TangkapModal } from '@/components/wasit/TangkapModal';
 import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
 import TeamQuadGrid from '@/components/wasit/TeamQuadGrid';
+import PipMotif from '@/components/wasit/PipMotif';
 import { RotateCcw, Undo2, Pencil, Settings, Flame, Trophy } from 'lucide-react';
 
 interface CasualScorerPadProps {
@@ -216,7 +217,7 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
       )}
 
       {/* Sub-Header Bar matching Image 2 */}
-      <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between font-mono text-xs shrink-0">
+      <div className="bg-slate-900/90 border-b border-slate-800 px-4 short:py-1.5 py-2.5 flex items-center justify-between font-mono text-xs shrink-0">
         <div className="flex items-center gap-3">
           <span className="px-2.5 py-1 rounded-xl bg-cyan-950 text-cyan-400 border border-cyan-800 font-black text-xs">
             MEJA #{match.tableNumber || tableId}
@@ -224,11 +225,16 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
           <span className="text-white font-extrabold text-xs">
             RONDE #{currentRoundNum}
           </span>
-          <span className="text-slate-500">•</span>
-          <span className="text-slate-400">
+          <span className="text-slate-500 hidden sm:inline">•</span>
+          <span className="text-slate-400 hidden md:flex items-center gap-1.5">
             MODE: <strong className="text-cyan-400 uppercase">{match.matchMode}</strong>
           </span>
-          <span className="text-slate-500">•</span>
+          <span className="text-slate-500 hidden sm:inline">•</span>
+          <PipMotif
+            count={Math.min(match.rounds.length, 7)}
+            accent="casual"
+            size="sm"
+          />
           <span className="text-amber-400 font-bold">
             TARGET: {match.targetValue} {match.matchMode === 'rounds' ? 'RONDE' : 'POIN'}
           </span>
@@ -309,12 +315,12 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
               </div>
 
               {/* Center Player Name & Large Centered Score Display */}
-              <div className="my-auto py-2 flex flex-col items-center justify-center">
+              <div className="my-auto py-2 short:py-0.5 flex flex-col items-center justify-center">
                 <div className="text-xl md:text-2xl font-black text-white font-display mb-1 tracking-wide">
                   {player.name}
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`text-6xl sm:text-7xl md:text-8xl font-black font-mono tracking-tight ${seatInfo.scoreColor}`}>
+                  <span className={`text-6xl sm:text-7xl md:text-8xl short:text-5xl font-black font-mono tracking-tight ${seatInfo.scoreColor}`}>
                     {player.currentScore}
                   </span>
                   <span className="text-sm font-black font-mono text-slate-400 uppercase">POIN</span>
@@ -322,7 +328,7 @@ export default function CasualScorerPad({ tableId, matchSession }: CasualScorerP
               </div>
 
               {/* Bottom Row: 5 Ronde History List matching Image 2 */}
-              <div className="border-t border-slate-800/80 pt-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none font-mono text-xs">
+              <div className="border-t border-slate-800/80 pt-2.5 short:pt-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none font-mono text-xs">
                 <span className="text-[10px] text-slate-500 font-bold uppercase shrink-0">5 RONDE:</span>
                 {historyList.length === 0 ? (
                   <span className="text-[10px] text-slate-600 italic">Belum ada ronde</span>

@@ -185,7 +185,7 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
           </div>
 
           <div className="text-center my-6">
-            <div className="text-6xl sm:text-7xl font-black text-rose-400 tracking-tight drop-shadow">
+            <div className="text-6xl sm:text-7xl short:text-5xl font-black text-rose-400 tracking-tight drop-shadow">
               {teamAScore}
             </div>
             <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-2">
@@ -221,7 +221,7 @@ export default function OradoScorerPad({ tableId, matchSession }: OradoScorerPad
           </div>
 
           <div className="text-center my-6">
-            <div className="text-6xl sm:text-7xl font-black text-blue-400 tracking-tight drop-shadow">
+            <div className="text-6xl sm:text-7xl short:text-5xl font-black text-blue-400 tracking-tight drop-shadow">
               {teamBScore}
             </div>
             <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-2">

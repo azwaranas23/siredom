@@ -11,6 +11,7 @@ import { SecondaryStatusModal } from '@/components/wasit/SecondaryStatusModal';
 import { PenaltyModal } from '@/components/wasit/PenaltyModal';
 import TimedomiPanel from '@/components/wasit/TimedomiPanel';
 import TeamQuadGrid from '@/components/wasit/TeamQuadGrid';
+import PipMotif from '@/components/wasit/PipMotif';
 import { RotateCcw, AlertOctagon, Undo2 } from 'lucide-react';
 
 interface PordiScorerPadProps {
@@ -146,6 +147,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
             🏆 {targetLabel}
           </span>
           <span className="text-slate-500">•</span>
+          <PipMotif count={Math.min(match.rounds.length % 7, 7)} accent="pordi" size="sm" />
           <span className="text-white font-extrabold">
             RONDE #{match.rounds.length + 1}
           </span>
@@ -179,7 +181,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
           onSelectMember={(playerId) => selectWinnerPlayer(playerId)}
         />
       ) : (
-      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3.5 p-3 min-h-0">
+      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3.5 short:gap-2 p-3 short:p-2 min-h-0">
         {match.players.map((player) => {
           const seatInfo = getSeatInfo(player.seatNumber);
           const isSelected = selectedWinnerId === player.id;
@@ -189,7 +191,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
             <div
               key={player.id}
               onClick={() => selectWinnerPlayer(player.id)}
-              className={`rounded-3xl border-2 p-5 md:p-6 flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.005] active:scale-[0.995] shadow-2xl relative overflow-hidden group ${seatInfo.bg} ${
+              className={`rounded-3xl short:rounded-2xl border-2 p-5 md:p-6 short:p-3 flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.005] active:scale-[0.995] shadow-2xl relative overflow-hidden group ${seatInfo.bg} ${
                 isSelected
                   ? 'border-amber-400 ring-4 ring-amber-500/30'
                   : seatInfo.border
@@ -208,11 +210,11 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
               </div>
 
               {/* Score Display — Ticket GH#5: denda terpusat di Panel Denda navbar */}
-              <div className="text-center my-auto py-2">
-                <div className={`text-6xl sm:text-7xl md:text-8xl font-black font-mono tracking-tight drop-shadow-md ${seatInfo.scoreColor}`}>
+              <div className="text-center my-auto short:py-0.5 py-2">
+                <div className={`text-6xl sm:text-7xl md:text-8xl short:text-5xl font-black font-mono tracking-tight drop-shadow-md ${seatInfo.scoreColor}`}>
                   {player.currentScore}
                 </div>
-                <div className="text-[11px] text-amber-400 font-mono uppercase tracking-widest mt-2 font-extrabold">
+                <div className="text-[11px] text-amber-400 font-mono uppercase tracking-widest mt-2 short:mt-0.5 font-extrabold">
                   POIN PORDI
                 </div>
               </div>
@@ -235,7 +237,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
               </div>
 
               {/* Bottom Cue Text */}
-              <div className="text-center text-xs text-slate-500 font-mono py-1 border-t border-slate-800/60 font-bold group-hover:text-amber-300 transition-colors">
+              <div className="text-center text-xs text-slate-500 font-mono py-1 short:hidden border-t border-slate-800/60 font-bold group-hover:text-amber-300 transition-colors">
                 Tekan untuk memilih pemenang ronde
               </div>
             </div>
