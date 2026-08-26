@@ -306,6 +306,7 @@ Bagian ini mengatur batasan teknis dan panduan desain yang harus dipatuhi tanpa 
 
 2. **Typography Rules:**
    Sistem antarmuka (UI) wajib menggunakan konfigurasi font variable sebagai berikut untuk menjaga konsistensi visual:
+   - **Display (heading/judul besar):** `Archivo` via `next/font` (`--font-display`) — *[Amendemen ADR-0002]*
    - **Sans:** `Geist Mono, ui-monospace, monospace`
    - **Serif:** `serif`
    - **Mono:** `JetBrains Mono, monospace`
