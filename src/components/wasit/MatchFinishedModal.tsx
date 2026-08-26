@@ -1,25 +1,19 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
 import confetti from 'canvas-confetti';
-import { Trophy, ChevronRight, LogOut, X, Sparkles } from 'lucide-react';
+import { Trophy, ChevronRight, X, Sparkles, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { releaseTableSessionAction } from '@/app/actions/tableActions';
-import { clearSessionCookieAction } from '@/app/actions/authActions';
-import { getOrCreateDeviceId } from '@/lib/device';
 
 interface Props {
   isOpen: boolean;
+  /** Ticket GH#14: tutup popup saja — wasit tetap di Live Wasit, tanpa logout/unlock. */
   onClose?: () => void;
 }
 
-export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
-  const router = useRouter();
-  const params = useParams();
-  const rawTableId = (params?.tableId as string) || '';
-  const { match, tenantCode, tableNumber, getRankedPlayers, getFunAwards, resetMatchOnServer, logout } = useScorerStore();
+export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
+  const { match, getRankedPlayers, getFunAwards } = useScorerStore();
 
   useEffect(() => {
     if (isOpen) {
@@ -41,39 +35,11 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
   const runnerUps = rankedPlayers.slice(1); // Ranks 2, 3, 4
   const awards = getFunAwards();
 
-  // Ticket GH#6: satu tombol terminal — SELESAI & KELUAR.
-  // Keluar = reset sesi (arsip bersih) + lepas kunci meja + hapus cookie + kembali ke portal.
-  const handleExit = async () => {
-    try {
-      await resetMatchOnServer();
-    } catch (err) {
-      console.error('Reset sesi gagal saat keluar:', err);
-    }
-
-    const deviceId = getOrCreateDeviceId();
-    const isUuid = !/^\d+$/.test(rawTableId);
-    const numericTable = Number(tableNumber);
-    try {
-      if (deviceId) {
-        await releaseTableSessionAction({
-          tableId: isUuid ? rawTableId : undefined,
-          tenantCode: (!isUuid && tenantCode) ? tenantCode : undefined,
-          tableNumber: (!isUuid && numericTable > 0) ? numericTable : undefined,
-          deviceId,
-        });
-      }
-    } catch (err) {
-      console.error('Gagal melepas kunci meja:', err);
-    }
-
-    try {
-      await clearSessionCookieAction();
-    } catch (err) {
-      console.error('Gagal menghapus cookie sesi:', err);
-    }
-
-    logout();
-    router.push('/play');
+  // Ticket GH#14: SELESAI & TUTUP = tutup popup hasil saja.
+  // Wasit tetap login & di Live Wasit; status COMPLETED tampil di pad.
+  // Match baru dimulai lewat halaman Setup (sesi COMPLETED -> setup membuat sesi segar).
+  const handleClose = () => {
+    if (onClose) onClose();
   };
 
   const getRankBadgeInfo = (rankNum: number) => {
@@ -112,14 +78,25 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
 
   return (
     <AnimatePresence>
-      {/* Modal terminal (Ticket GH#6): tanpa backdrop-close / X — hanya SELESAI & KELUAR */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+      <div
+        onClick={handleClose}
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/90 backdrop-blur-md cursor-pointer animate-in fade-in duration-200"
+      >
         <motion.div
+          onClick={(e) => e.stopPropagation()}
           initial={{ scale: 0.95, opacity: 0, y: 15 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 15 }}
           className="relative max-w-4xl w-full bg-slate-900 border border-amber-500/60 rounded-3xl p-4 sm:p-6 shadow-2xl overflow-y-auto font-mono max-h-[90vh] cursor-default"
         >
+          {/* Top Close Button */}
+          <button
+            onClick={handleClose}
+            className="absolute top-4 right-4 p-2 rounded-xl bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors z-10"
+            aria-label="Tutup"
+          >
+            <X className="w-4 h-4" />
+          </button>
 
           {/* Top Ambient Golden Radial Glow */}
           <div className="absolute -top-24 left-1/3 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -162,13 +139,13 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen }) => {
                 </p>
               </div>
 
-              {/* Action Buttons — Ticket GH#6: hanya SELESAI & KELUAR */}
+              {/* Action Buttons — Ticket GH#14: SELESAI & TUTUP (tetap di Live Wasit) */}
               <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-2">
                 <button
-                  onClick={handleExit}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  onClick={handleClose}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4" /> SELESAI & KELUAR <ChevronRight className="w-4 h-4" />
+                  <RotateCcw className="w-4 h-4" /> SELESAI & TUTUP <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>

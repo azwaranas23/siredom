@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RulesetMode } from '@/types/domino';
 import { useScorerStore } from '@/store/useScorerStore';
 import CasualScorerPad from './CasualScorerPad';
@@ -20,6 +20,13 @@ export default function ScorerPadRenderer({ tableId, rulesetMode = 'CASUAL', mat
   const storeMatchId = useScorerStore((s) => s.match.id);
   const isMatchCompleted = useScorerStore((s) => s.match.status === 'completed');
   const setMatchFromDb = useScorerStore((s) => s.setMatchFromDb);
+
+  // Ticket GH#14: dismiss lokal — "SELESAI & TUTUP" menutup popup tanpa
+  // mengubah status; reset otomatis saat status keluar dari completed.
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    if (!isMatchCompleted) setDismissed(false);
+  }, [isMatchCompleted]);
 
   // Sinkronisasi awal: pastikan store memuat sesi dari DB (mis. wasit membuka
   // langsung URL meja yang statusnya COMPLETED — devlog/0008).
@@ -45,8 +52,11 @@ export default function ScorerPadRenderer({ tableId, rulesetMode = 'CASUAL', mat
   return (
     <>
       {pad}
-      {/* Akhirnya terpasang (devlog/0008): pop-up "Pertandingan Berakhir" sesuai PRD Bagian 2.3 */}
-      <MatchFinishedModal isOpen={isMatchCompleted} />
+      {/* Pop-up hasil (PRD Bagian 2.3) — SELESAI & TUTUP hanya dismiss (GH#14) */}
+      <MatchFinishedModal
+        isOpen={isMatchCompleted && !dismissed}
+        onClose={() => setDismissed(true)}
+      />
     </>
   );
 }
