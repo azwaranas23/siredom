@@ -2,13 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Core surfaces */
+  --background: 222 47% 5%;
+  --foreground: 210 40% 98%;
+
+  --surface: 222 32% 9%;
+  --surface-subtle: 220 26% 12%;
+  --surface-elevated: 220 24% 15%;
+
+  /* Content */
+  --muted-foreground: 215 16% 55%;
+
+  /* Borders */
+  --border: 217 19% 18%;
+  --border-strong: 215 16% 27%;
+
+  /* Brand / actions */
+  --primary: 160 84% 39%;
+  --primary-foreground: 222 47% 5%;
+
+  /* Semantic states */
+  --success: 160 84% 39%;
+  --warning: 38 92% 50%;
+  --danger: 0 72% 51%;
+  --info: 199 89% 48%;
+
+  /* Focus */
+  --ring: 160 84% 45%;
+
+  /* Shape */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
 @layer base {
   body {
     @apply bg-gray-950 text-gray-100 font-sans antialiased select-none overflow-x-hidden min-h-screen;
-    background-image: 
-      radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-      radial-gradient(circle at 85% 85%, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
-      radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 60%);
+    background-image:
+      radial-gradient(
+        circle at 15% 15%,
+        rgba(59, 130, 246, 0.08) 0%,
+        transparent 40%
+      ),
+      radial-gradient(
+        circle at 85% 85%,
+        rgba(239, 68, 68, 0.08) 0%,
+        transparent 40%
+      ),
+      radial-gradient(
+        circle at 50% 50%,
+        rgba(16, 185, 129, 0.05) 0%,
+        transparent 60%
+      );
     background-attachment: fixed;
   }
 
@@ -42,7 +89,11 @@
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.6) 0%,
+    rgba(15, 23, 42, 0.8) 100%
+  );
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
@@ -51,34 +102,70 @@
 .arcade-btn {
   @apply relative font-extrabold uppercase tracking-wider transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
-  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 6px 0 rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .arcade-btn:active {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 /* Player Identity Colors & Glows */
-.border-seat-1 { border-color: #ef4444; }
-.border-seat-2 { border-color: #3b82f6; }
-.border-seat-3 { border-color: #10b981; }
-.border-seat-4 { border-color: #eab308; }
+.border-seat-1 {
+  border-color: #ef4444;
+}
+.border-seat-2 {
+  border-color: #3b82f6;
+}
+.border-seat-3 {
+  border-color: #10b981;
+}
+.border-seat-4 {
+  border-color: #eab308;
+}
 
-.bg-seat-1 { background-color: rgba(239, 68, 68, 0.15); }
-.bg-seat-2 { background-color: rgba(59, 130, 246, 0.15); }
-.bg-seat-3 { background-color: rgba(16, 185, 129, 0.15); }
-.bg-seat-4 { background-color: rgba(234, 179, 8, 0.15); }
+.bg-seat-1 {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+.bg-seat-2 {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+.bg-seat-3 {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+.bg-seat-4 {
+  background-color: rgba(234, 179, 8, 0.15);
+}
 
-.glow-seat-1 { box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
-.glow-seat-2 { box-shadow: 0 0 25px rgba(59, 130, 246, 0.4); }
-.glow-seat-3 { box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
-.glow-seat-4 { box-shadow: 0 0 25px rgba(234, 179, 8, 0.4); }
+.glow-seat-1 {
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+}
+.glow-seat-2 {
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.4);
+}
+.glow-seat-3 {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+}
+.glow-seat-4 {
+  box-shadow: 0 0 25px rgba(234, 179, 8, 0.4);
+}
 
-.text-seat-1 { color: #f87171; }
-.text-seat-2 { color: #60a5fa; }
-.text-seat-3 { color: #34d399; }
-.text-seat-4 { color: #facc15; }
+.text-seat-1 {
+  color: #f87171;
+}
+.text-seat-2 {
+  color: #60a5fa;
+}
+.text-seat-3 {
+  color: #34d399;
+}
+.text-seat-4 {
+  color: #facc15;
+}
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
