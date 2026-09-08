@@ -292,6 +292,11 @@ export const useScorerStore = create<ScorerStore>()(
         const rawStatus = dbMatch.status ? String(dbMatch.status).toLowerCase() : currentMatch.status;
         const normStatus = rawStatus === 'in_progress' || rawStatus === 'completed' || rawStatus === 'setup' ? rawStatus : 'in_progress';
 
+        const finalRounds =
+          currentMatch.id === dbMatch.id && currentMatch.rounds.length > formattedRounds.length
+            ? currentMatch.rounds
+            : formattedRounds;
+
         const newMatchState: Match = {
           ...currentMatch,
           id: dbMatch.id || currentMatch.id,
@@ -308,7 +313,7 @@ export const useScorerStore = create<ScorerStore>()(
           rulesConfig: dbMatch.rulesConfig || currentMatch.rulesConfig,
           status: normStatus as any,
           players: formattedPlayers.length > 0 ? formattedPlayers : currentMatch.players,
-          rounds: formattedRounds,
+          rounds: finalRounds,
         };
 
         const updatedSessions = {
@@ -803,9 +808,19 @@ export const useScorerStore = create<ScorerStore>()(
 
         const normalizedAction = (String(action).toUpperCase() as ActionType) || 'MENANG_BIASA';
 
+        const enabledActions = match.rulesConfig?.enabledActions;
+        const isBerdiriDisabled = enabledActions?.berdiri === false;
+        const isDudukDisabled = enabledActions?.duduk === false;
+
         const initialManual: Record<string, RoundStatusTag> = {};
         otherPlayers.forEach((p) => {
-          initialManual[p.id] = normalizedAction === 'KANDANG' ? 'BERDIRI' : 'DUDUK';
+          if (isBerdiriDisabled) {
+            initialManual[p.id] = 'DUDUK';
+          } else if (isDudukDisabled) {
+            initialManual[p.id] = 'BERDIRI';
+          } else {
+            initialManual[p.id] = normalizedAction === 'KANDANG' ? 'BERDIRI' : 'DUDUK';
+          }
         });
 
         if (normalizedAction === 'TANGKAP') {
@@ -816,10 +831,9 @@ export const useScorerStore = create<ScorerStore>()(
             manualStatuses: {},
             fsmState: 'MODAL_TANGKAP_VICTIM',
           });
-        } else if (normalizedAction === 'KANDANG') {
-          // Zero-Redundancy Auto-Commit: 3 pemain lain otomatis BERDIRI,
-          // langsung ke CONFIRMATION tanpa modal status manual.
-          // Scorer pad mendeteksi state ini & memicu commit + animasi kemenangan.
+        } else if (normalizedAction === 'KANDANG' || isBerdiriDisabled || isDudukDisabled) {
+          // Zero-Redundancy Auto-Commit: bila status KANDANG atau salah satu status (Berdiri/Duduk) nonaktif,
+          // status 3 pemain sisa sudah 100% deterministik — langsung ke CONFIRMATION tanpa modal status.
           set({
             selectedWinnerId: winnerId,
             selectedAction: normalizedAction,
@@ -1129,6 +1143,7 @@ export const useScorerStore = create<ScorerStore>()(
 
       getRankedPlayers: (targetTableNum) => {
         const match = targetTableNum ? get().getTableMatch(targetTableNum) : get().match;
+        const hasRoundsPlayed = (match.rounds || []).length > 0 && match.players.some((p) => p.currentScore !== 0);
         const sorted = [...match.players].sort((a, b) => b.currentScore - a.currentScore);
 
         let currentRank = 1;
@@ -1138,10 +1153,11 @@ export const useScorerStore = create<ScorerStore>()(
           }
           return {
             ...player,
-            rank: currentRank,
+            rank: hasRoundsPlayed ? currentRank : 0,
           };
         });
       },
+
 
       getWinstreak: (playerId: string, targetTableNum?: number) => {
         const match = targetTableNum ? get().getTableMatch(targetTableNum) : get().match;
@@ -1225,10 +1241,10 @@ export const useScorerStore = create<ScorerStore>()(
 
       getFunAwards: (targetTableNum?: number) => {
         const match = targetTableNum ? get().getTableMatch(targetTableNum) : get().match;
-        const counts: Record<string, { kandang: number; palang: number; ditangkap: number; ceki: number }> = {};
+        const counts: Record<string, { kandang: number; palang: number; ditangkap: number; ceki: number; tangkap: number }> = {};
 
         match.players.forEach((p) => {
-          counts[p.id] = { kandang: 0, palang: 0, ditangkap: 0, ceki: 0 };
+          counts[p.id] = { kandang: 0, palang: 0, ditangkap: 0, ceki: 0, tangkap: 0 };
         });
 
         match.rounds.forEach((r) => {
@@ -1242,6 +1258,9 @@ export const useScorerStore = create<ScorerStore>()(
           if (normAct === 'CEKI' && r.winnerPlayerId && counts[r.winnerPlayerId]) {
             counts[r.winnerPlayerId].ceki += 1;
           }
+          if (normAct === 'TANGKAP' && r.winnerPlayerId && counts[r.winnerPlayerId]) {
+            counts[r.winnerPlayerId].tangkap += 1;
+          }
           if (normAct === 'TANGKAP' && r.victimPlayerId && counts[r.victimPlayerId]) {
             counts[r.victimPlayerId].ditangkap += 1;
           }
@@ -1251,6 +1270,7 @@ export const useScorerStore = create<ScorerStore>()(
         let terbanyakPalang: { player: Player; count: number } | null = null;
         let palingSeringDitangkap: { player: Player; count: number } | null = null;
         let cekiMaster: { player: Player; count: number } | null = null;
+        let tangkapTerbanyak: { player: Player; count: number } | null = null;
 
         match.players.forEach((player) => {
           const c = counts[player.id];
@@ -1266,9 +1286,12 @@ export const useScorerStore = create<ScorerStore>()(
           if (c.ceki > 0 && (!cekiMaster || c.ceki > cekiMaster.count)) {
             cekiMaster = { player, count: c.ceki };
           }
+          if (c.tangkap > 0 && (!tangkapTerbanyak || c.tangkap > tangkapTerbanyak.count)) {
+            tangkapTerbanyak = { player, count: c.tangkap };
+          }
         });
 
-        return { rajaKandang, terbanyakPalang, palingSeringDitangkap, cekiMaster };
+        return { rajaKandang, terbanyakPalang, palingSeringDitangkap, cekiMaster, tangkapTerbanyak };
       },
 
       getTelemetryData: (targetTableNum?: number) => {
@@ -1313,8 +1336,11 @@ export const useScorerStore = create<ScorerStore>()(
         userRole: state.userRole,
         tenantCode: state.tenantCode,
         tableNumber: state.tableNumber,
+        match: state.match,
+        tableSessions: state.tableSessions,
         pendingSyncQueue: state.pendingSyncQueue,
       }),
+
     }
   )
 );

@@ -161,7 +161,10 @@ export async function POST(req: Request) {
       const updated = await prisma.matchSession.update({
         where: { id: matchId },
         data: {
-          ...(matchMode && { matchMode: matchMode.toUpperCase() }),
+          ...(matchMode && {
+            matchMode: matchMode.toUpperCase(),
+            targetType: matchMode.toLowerCase() === 'rounds' ? 'FIXED_ROUNDS' : 'RACE_TO_POINTS',
+          }),
           ...(targetValue && { targetValue: Number(targetValue) }),
         },
       });

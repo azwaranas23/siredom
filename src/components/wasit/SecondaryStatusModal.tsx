@@ -23,6 +23,10 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
 
   if (!isOpen || !selectedWinnerId || !selectedAction) return null;
 
+  const enabledActionsConfig = match.rulesConfig?.enabledActions;
+  const isDudukEnabled = enabledActionsConfig?.duduk ?? true;
+  const isBerdiriEnabled = enabledActionsConfig?.berdiri ?? true;
+
   const winner = match.players.find(
     (p) => p.id === selectedWinnerId || p.seatNumber === Number(selectedWinnerId)
   );
@@ -49,8 +53,8 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
         onClick={onClose}
       />
 
-      {/* Centered Modal / Edge-to-Edge Bottom Sheet Drawer — Ticket GH#16: horizontal 3 kolom */}
-      <div className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#0d1527]/95 backdrop-blur-xl border-t border-slate-800/80 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] p-4 md:p-6 pb-6 animate-in slide-in-from-bottom duration-300">
+      {/* Centered Modal / Edge-to-Edge Bottom Sheet Drawer */}
+      <div className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#0d1527]/95 backdrop-blur-xl border-t border-slate-800/80 rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)] p-4 md:p-6 pb-6 animate-in slide-in-from-bottom duration-300">
         {/* Top Pill Handle Bar */}
         <div className="w-12 h-1 bg-slate-700/80 rounded-full mx-auto mb-4" />
 
@@ -74,7 +78,7 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
           </div>
         </div>
 
-        {/* Player Status Cards — Ticket GH#16: HORIZONTAL (landscape) / vertikal fallback */}
+        {/* Player Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto mb-5 font-mono">
           {remainingPlayers.map((player) => {
             const currentStatus = String(manualStatuses[player.id] || 'DUDUK').toUpperCase();
@@ -84,13 +88,13 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
             return (
               <div
                 key={player.id}
-                className={`bg-slate-900/90 border rounded-2xl p-3 shadow-sm space-y-2 transition-colors ${
+                className={`bg-slate-900/90 border rounded-xl p-3 shadow-sm space-y-2 transition-colors ${
                   isBerdiri ? 'border-rose-800/70' : isDuduk ? 'border-blue-900/60' : 'border-slate-800/80'
                 }`}
               >
                 {/* Seat badge + nama */}
                 <div className="flex items-center gap-2 px-0.5">
-                  <span className="text-[11px] font-black px-2 py-0.5 rounded-lg bg-slate-950 text-slate-400 border border-slate-800 shrink-0">
+                  <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800 shrink-0">
                     K#{player.seatNumber}
                   </span>
                   <span className="text-sm font-extrabold text-white truncate">
@@ -98,45 +102,49 @@ export const SecondaryStatusModal: React.FC<Props> = ({ isOpen, onClose, onSucce
                   </span>
                 </div>
 
-                {/* DUDUK — full width dalam kartu */}
-                <button
-                  type="button"
-                  onClick={() => setManualPlayerStatus(player.id, 'DUDUK')}
-                  className={`w-full py-2.5 rounded-xl flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
-                    isDuduk
-                      ? 'bg-blue-950 text-blue-300 border-2 border-blue-700 shadow-md shadow-blue-950/50 scale-[1.02]'
-                      : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
-                  }`}
-                >
-                  <span className="text-sm">🪑</span>
-                  <span>DUDUK</span>
-                </button>
+                {/* DUDUK — Segmented Pill */}
+                {isDudukEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setManualPlayerStatus(player.id, 'DUDUK')}
+                    className={`w-full py-2.5 rounded-lg flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                      isDuduk
+                        ? 'bg-[#2563EB] text-white border-2 border-blue-400 shadow-md shadow-blue-900/50 scale-[1.02]'
+                        : 'bg-surface-elevated border border-border text-content-muted hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm">🪑</span>
+                    <span>DUDUK</span>
+                  </button>
+                )}
 
-                {/* BERDIRI — full width dalam kartu */}
-                <button
-                  type="button"
-                  onClick={() => setManualPlayerStatus(player.id, 'BERDIRI')}
-                  className={`w-full py-2.5 rounded-xl flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
-                    isBerdiri
-                      ? 'bg-rose-600 text-white border-2 border-rose-400 shadow-md shadow-rose-600/50 scale-[1.02]'
-                      : 'bg-slate-950/80 border border-slate-800 text-slate-500 hover:text-white'
-                  }`}
-                >
-                  <span className="text-sm">😭</span>
-                  <span>BERDIRI</span>
-                </button>
+                {/* BERDIRI — Segmented Pill */}
+                {isBerdiriEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setManualPlayerStatus(player.id, 'BERDIRI')}
+                    className={`w-full py-2.5 rounded-lg flex items-center gap-1.5 justify-center transition-all cursor-pointer text-xs font-black ${
+                      isBerdiri
+                        ? 'bg-[#DC2626] text-white border-2 border-red-400 shadow-md shadow-red-900/50 scale-[1.02]'
+                        : 'bg-surface-elevated border border-border text-content-muted hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm">😭</span>
+                    <span>BERDIRI</span>
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* Full-width Cyan Submit Button matching Image 2 */}
+        {/* Full-width Cyan Submit Button */}
         <div className="max-w-4xl mx-auto">
           <button
             onClick={handleConfirm}
-            className="w-full py-4 rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-sm font-sans uppercase tracking-wider shadow-xl shadow-cyan-400/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.98] cursor-pointer"
+            className="w-full py-3.5 rounded-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs font-sans uppercase tracking-wider shadow-xl shadow-cyan-400/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.98] cursor-pointer"
           >
-            KONFIRMASI & SIMPAN RONDE <ArrowRight className="w-5 h-5" />
+            KONFIRMASI & SIMPAN RONDE <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>

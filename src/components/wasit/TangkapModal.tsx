@@ -62,49 +62,52 @@ export const TangkapModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) =>
           </p>
         </div>
 
-        {/* Compact Victim Candidates Rows */}
-        <div className="space-y-2 max-w-3xl mx-auto mb-4">
+        {/* Horizontal 3-Column Victim Candidates Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto mb-5 font-mono">
           {candidateVictims.map((player) => {
             const isSelected = player.id === selectedVictimId;
-            const dotColor = SEAT_DOT_COLORS[player.seatNumber - 1] || 'bg-slate-400';
 
             return (
               <button
                 key={player.id}
+                type="button"
                 onClick={() => setSelectedVictimId(player.id)}
-                className={`w-full bg-slate-900/90 border rounded-xl p-2.5 px-4 flex items-center justify-between shadow-sm transition-all text-left cursor-pointer ${
+                className={`w-full bg-slate-900/90 border rounded-xl p-3 flex flex-col justify-between space-y-3 shadow-sm transition-all text-left cursor-pointer ${
                   isSelected
-                    ? 'border-2 border-rose-500 bg-[#2a1318] ring-2 ring-rose-500/30 scale-[1.005]'
+                    ? 'border-2 border-rose-500 bg-[#2a1318] ring-2 ring-rose-500/30 scale-[1.02]'
                     : 'border-slate-800/80 hover:bg-slate-800/60'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-3 h-3 rounded-full ${dotColor} shadow-sm`} />
-                  <span className="text-sm md:text-base font-extrabold text-white">
+                <div className="flex items-center gap-2 px-0.5">
+                  <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 border border-slate-800 shrink-0">
+                    K#{player.seatNumber}
+                  </span>
+                  <span className="text-sm font-extrabold text-white truncate">
                     {player.name}
                   </span>
                 </div>
 
-                <span
-                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold flex items-center gap-1 ${
+                <div
+                  className={`w-full py-2 rounded-lg border text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
                     isSelected
-                      ? 'bg-rose-950 text-rose-300 border-rose-700'
+                      ? 'bg-rose-600 text-white border-rose-400 shadow-md shadow-rose-900/50'
                       : 'bg-slate-950 text-slate-400 border-slate-800'
                   }`}
                 >
-                  💀 DITANGKAP (-3)
-                </span>
+                  <span>💀</span>
+                  <span>DITANGKAP (-3)</span>
+                </div>
               </button>
             );
           })}
         </div>
 
         {/* Compact Bottom Full-width Cyan Button */}
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <button
             disabled={!selectedVictimId}
             onClick={handleConfirm}
-            className="w-full py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 text-slate-950 font-black text-xs md:text-sm font-display uppercase tracking-wider shadow-lg shadow-cyan-400/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.99]"
+            className="w-full py-3.5 rounded-full bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 text-slate-950 font-black text-xs md:text-sm font-sans uppercase tracking-wider shadow-xl shadow-cyan-400/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.005] active:scale-[0.98] cursor-pointer"
           >
             Konfirmasi & Lanjut <ArrowRight className="w-4 h-4" />
           </button>

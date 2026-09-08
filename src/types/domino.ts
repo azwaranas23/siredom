@@ -51,6 +51,17 @@ export interface PointsConfig {
   duduk: number;        // default 0
 }
 
+export interface EnabledActionsConfig {
+  menang_biasa?: boolean;
+  kandang?: boolean;
+  ceki?: boolean;
+  palang?: boolean;
+  tangkap?: boolean;
+  ditangkap?: boolean;
+  berdiri?: boolean;
+  duduk?: boolean;
+}
+
 export interface OradoConfig {
   apolloRule: boolean;       // Instant win if 101 vs 0
   deadBalak0Penalty: boolean; // Balak 0 dead = 13 points penalty
@@ -58,8 +69,11 @@ export interface OradoConfig {
 
 export interface RulesConfig {
   pointsConfig: PointsConfig;
+  enabledActions?: EnabledActionsConfig;
   oradoConfig: OradoConfig;
 }
+
+
 
 export interface RoundPlayerScore {
   id?: string;
@@ -159,6 +173,7 @@ export interface FunAwards {
   terbanyakPalang: { player: Player; count: number } | null;
   palingSeringDitangkap: { player: Player; count: number } | null;
   cekiMaster: { player: Player; count: number } | null;
+  tangkapTerbanyak: { player: Player; count: number } | null;
 }
 
 // ============================================================

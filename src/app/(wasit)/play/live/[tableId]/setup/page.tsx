@@ -4,14 +4,15 @@ import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useScorerStore } from '@/store/useScorerStore';
 import { setupMatchSessionAction } from '@/features/scorer/actions';
-import { Users, Target, Sliders, ArrowRight, Shield, Trophy, CheckSquare, Square, Sparkles } from 'lucide-react';
-import { PointsConfig, RulesetMode, MatchCategory, OradoConfig } from '@/types/domino';
+import { Users, Target, Sliders, ArrowRight, Shield, Trophy, BookOpen } from 'lucide-react';
+import { PointsConfig, RulesetMode, MatchCategory, OradoConfig, EnabledActionsConfig } from '@/types/domino';
+import { Switch } from '@/components/ui/switch';
 
 const SEAT_CONFIG = [
-  { seat: 1, team: 'A', label: 'Kursi 1 (Merah - Tim A)', border: 'border-rose-500/40 focus:border-rose-500' },
-  { seat: 2, team: 'B', label: 'Kursi 2 (Biru - Tim B)', border: 'border-blue-500/40 focus:border-blue-500' },
-  { seat: 3, team: 'A', label: 'Kursi 3 (Hijau - Tim A)', border: 'border-emerald-500/40 focus:border-emerald-500' },
-  { seat: 4, team: 'B', label: 'Kursi 4 (Kuning - Tim B)', border: 'border-amber-500/40 focus:border-amber-500' },
+  { seat: 1, team: 'A', label: 'Kursi 1 (Merah - Tim A)', border: 'border-[#FB7185]/40 focus:border-[#FB7185]' },
+  { seat: 2, team: 'B', label: 'Kursi 2 (Biru - Tim B)', border: 'border-[#6366F1]/40 focus:border-[#6366F1]' },
+  { seat: 3, team: 'A', label: 'Kursi 3 (Hijau - Tim A)', border: 'border-[#34D399]/40 focus:border-[#34D399]' },
+  { seat: 4, team: 'B', label: 'Kursi 4 (Kuning - Tim B)', border: 'border-[#FBBF24]/40 focus:border-[#FBBF24]' },
 ];
 
 const PORDI_DEFAULT_POINTS: PointsConfig = {
@@ -25,6 +26,17 @@ const PORDI_DEFAULT_POINTS: PointsConfig = {
   duduk: 0,
 };
 
+const DEFAULT_ENABLED_ACTIONS: EnabledActionsConfig = {
+  menang_biasa: true,
+  kandang: true,
+  ceki: true,
+  palang: true,
+  tangkap: true,
+  ditangkap: true,
+  berdiri: true,
+  duduk: true,
+};
+
 interface PageProps {
   params: Promise<{
     tableId: string;
@@ -36,7 +48,6 @@ export default function TableSetupPage({ params }: PageProps) {
   const router = useRouter();
   const { match, setMatchFromDb, tenantCode, tableNumber } = useScorerStore();
 
-  // Display label: prefer numeric table number; fallback to raw ID only when non-numeric
   const displayTableId = /^\d+$/.test(tableId) ? tableId : (tableNumber ? `Meja #${tableNumber}` : 'Meja Wasit');
   const tableLabel = displayTableId ? `Meja #${displayTableId}` : 'Meja Wasit';
 
@@ -46,8 +57,11 @@ export default function TableSetupPage({ params }: PageProps) {
   const [targetType, setTargetType] = useState<'FIXED_ROUNDS' | 'RACE_TO_POINTS' | 'SET_101'>(match.targetType || 'FIXED_ROUNDS');
   const [targetValue, setTargetValue] = useState<number | string>(match.targetValue || 10);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig>(match.pointsConfig || PORDI_DEFAULT_POINTS);
+  const [enabledActions, setEnabledActions] = useState<EnabledActionsConfig>(
+    match.rulesConfig?.enabledActions || DEFAULT_ENABLED_ACTIONS
+  );
 
-  const [oradoConfig, setOradoConfig] = useState<OradoConfig>(() => ({
+  const [oradoConfig] = useState<OradoConfig>(() => ({
     apolloRule: match.rulesConfig?.oradoConfig?.apolloRule ?? true,
     deadBalak0Penalty: match.rulesConfig?.oradoConfig?.deadBalak0Penalty ?? true,
   }));
@@ -66,7 +80,6 @@ export default function TableSetupPage({ params }: PageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  // Handle Cascading Logic when RulesetMode or MatchCategory changes
   useEffect(() => {
     if (rulesetMode === 'PB_ORADO') {
       setMatchCategory('TEAM_2V2');
@@ -85,7 +98,6 @@ export default function TableSetupPage({ params }: PageProps) {
       }
       setPointsConfig(PORDI_DEFAULT_POINTS);
     } else {
-      // Casual
       if (matchMode === 'rounds') {
         setTargetType('FIXED_ROUNDS');
       } else {
@@ -105,13 +117,18 @@ export default function TableSetupPage({ params }: PageProps) {
     }));
   };
 
+  const handleToggleAction = (key: keyof EnabledActionsConfig) => {
+    setEnabledActions((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? true),
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
-    // Reset error handling if any
     setSubmitError('');
-    
+
     let finalTargetVal = Number(targetValue);
     if (rulesetMode === 'PB_ORADO') {
       finalTargetVal = 101;
@@ -143,7 +160,7 @@ export default function TableSetupPage({ params }: PageProps) {
         targetType,
         targetValue: finalTargetVal,
         pointsConfig,
-        rulesConfig: { pointsConfig, oradoConfig },
+        rulesConfig: { pointsConfig, enabledActions, oradoConfig },
         oradoConfig,
         players: formattedPlayers,
       });
@@ -162,407 +179,418 @@ export default function TableSetupPage({ params }: PageProps) {
     }
   };
 
-  // Ticket GH#4: markup input satu kursi, dipakai ulang layout flat & grouped
   const renderSeatInput = (seat: (typeof SEAT_CONFIG)[number]) => {
     const currentVal = players.find((p) => p.seatNumber === seat.seat)?.name || '';
     return (
-      <div key={seat.seat} className="space-y-1.5 font-mono">
-        <label className="block text-xs font-bold text-slate-400">
+      <div key={seat.seat} className="space-y-1 font-mono">
+        <label className="block text-[11px] font-bold text-content-muted">
           {matchCategory === 'TEAM_2V2'
             ? `Kursi ${seat.seat} (${seat.team === 'A' ? 'Tim A' : 'Tim B'})`
-            : `Kursi ${seat.seat} (Individu)`}
+            : `Kursi ${seat.seat}`}
         </label>
         <input
           type="text"
           value={currentVal}
           onChange={(e) => handlePlayerNameChange(seat.seat as any, e.target.value)}
-          placeholder={`Nama Pemain ${seat.seat}...`}
-          className={`w-full px-4 py-3 rounded-xl bg-slate-950 border text-white text-sm font-bold focus:outline-none transition-colors ${seat.border}`}
+          placeholder={`Pemain ${seat.seat}...`}
+          className={`w-full px-3 py-2 rounded-lg bg-surface-elevated border text-white text-xs font-bold focus:outline-none transition-colors ${seat.border}`}
         />
       </div>
     );
   };
 
+  const CASUAL_ACTION_ROWS: { key: keyof PointsConfig; label: string; desc: string; icon: string }[] = [
+    { key: 'menang_biasa', label: 'Menang Biasa', desc: 'Standard victory round', icon: '👑' },
+    { key: 'kandang', label: 'Kandang', desc: 'Closed game victory', icon: '🔥' },
+    { key: 'ceki', label: 'Ceki', desc: 'Domino check win', icon: '✅' },
+    { key: 'palang', label: 'Palang', desc: 'Palang special win', icon: '🐐' },
+    { key: 'tangkap', label: 'Tangkap', desc: 'Capturer bonus pts', icon: '🚓' },
+    { key: 'ditangkap', label: 'Ditangkap (Penalti Korban)', desc: 'Captured victim penalty', icon: '💀' },
+    { key: 'berdiri', label: 'Status Berdiri', desc: 'Loser post-round status', icon: '😭' },
+    { key: 'duduk', label: 'Status Duduk', desc: 'Safe post-round status', icon: '🪑' },
+  ];
+
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6 p-4 md:p-6 pb-12 font-sans">
-      {/* Top Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-extrabold text-white flex items-center gap-2 font-display">
-            <Users className="w-6 h-6 text-cyan-400" />
-            Konfigurasi Pertandingan {tableLabel}
-          </h1>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            Setup Mode Aturan, Kategori Match, Formasi Pemain & Target Nilai
-          </p>
-        </div>
-      </div>
-
-      {submitError && (
-        <div className="bg-rose-950/40 border border-rose-800 text-rose-300 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 animate-shake">
-          <Shield className="w-5 h-5 text-rose-500 shrink-0" />
-          <p>{submitError}</p>
-        </div>
-      )}
-
-      {/* STEP 1: RULESET SELECTION */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 font-mono">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3 font-mono">
-          <Trophy className="w-4 h-4 text-cyan-400" />
-          1. Pilih Mode Aturan Permainan (Ruleset Mode)
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono">
-          {/* CASUAL */}
-          <button
-            type="button"
-            onClick={() => setRulesetMode('CASUAL')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
-              rulesetMode === 'CASUAL'
-                ? 'bg-gradient-to-br from-cyan-950 to-slate-900 border-cyan-400 ring-2 ring-cyan-500/20'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-white text-sm">CASUAL MODE</span>
-              {rulesetMode === 'CASUAL' && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />}
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans mt-1">
-              Bebas tentukan batas poin/ronde dan bobot nilai custom untuk warkop.
+    <div className="min-h-screen bg-background text-foreground p-3.5 md:p-5 font-sans">
+      <div className="max-w-[1400px] mx-auto space-y-3.5">
+        {/* Header Bar */}
+        <div className="bg-surface border border-border rounded-xl p-3.5 md:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2 font-display">
+              <Users className="w-5 h-5 text-brand-cyan" />
+              Setup Meja & Matriks Ruleset {tableLabel}
+            </h1>
+            <p className="text-[11px] text-content-muted font-mono mt-0.5">
+              Konfigurasi Mode Regulasi, Formasi Pemain, Target Match & Matriks Bobot Poin Wasit
             </p>
-          </button>
-
-          {/* PB PORDI */}
-          <button
-            type="button"
-            onClick={() => setRulesetMode('PB_PORDI')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
-              rulesetMode === 'PB_PORDI'
-                ? 'bg-gradient-to-br from-amber-950 to-slate-900 border-amber-400 ring-2 ring-amber-500/20'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-amber-300 text-sm">PB PORDI STANDAR</span>
-              {rulesetMode === 'PB_PORDI' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />}
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans mt-1">
-              Resmi PORDI: Fixed 7 Ronde (Tunggal) atau Race to 7 Poin (Ganda).
-            </p>
-          </button>
-
-          {/* PB ORADO */}
-          <button
-            type="button"
-            onClick={() => setRulesetMode('PB_ORADO')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
-              rulesetMode === 'PB_ORADO'
-                ? 'bg-gradient-to-br from-purple-950 to-slate-900 border-purple-400 ring-2 ring-purple-500/20'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-purple-300 text-sm">PB ORADO (COUNTING)</span>
-              {rulesetMode === 'PB_ORADO' && <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />}
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans mt-1">
-              Counting Titik Batu (Khusus Tim 2v2). Target Set 101 Poin & Apollo 101-0.
-            </p>
-          </button>
-        </div>
-      </div>
-
-      {/* STEP 2: MATCH CATEGORY (TUNGGAL VS TIM) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 font-mono">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Users className="w-4 h-4 text-cyan-400" />
-          2. Pilih Kategori Pertandingan (Tunggal vs Tim)
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button
-            type="button"
-            disabled={rulesetMode === 'PB_ORADO'}
-            onClick={() => setMatchCategory('SINGLE_1V1V1V1')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
-              rulesetMode === 'PB_ORADO'
-                ? 'opacity-40 cursor-not-allowed bg-slate-950 border-slate-900'
-                : matchCategory === 'SINGLE_1V1V1V1'
-                ? 'bg-gradient-to-br from-cyan-950 to-slate-900 border-cyan-400 ring-2 ring-cyan-500/20'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-            }`}
-          >
-            <div className="font-extrabold text-white text-sm">TUNGGAL / PERORANGAN (1V1V1V1)</div>
-            <p className="text-[11px] text-slate-400 font-sans mt-1">
-              4 Pemain bertanding secara individu (Setiap orang mencari poin sendiri).
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMatchCategory('TEAM_2V2')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
-              matchCategory === 'TEAM_2V2'
-                ? 'bg-gradient-to-br from-emerald-950 to-slate-900 border-emerald-400 ring-2 ring-emerald-500/20'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-            }`}
-          >
-            <div className="font-extrabold text-white text-sm flex items-center justify-between">
-              <span>GANDA / TIM (2V2)</span>
-              {rulesetMode === 'PB_ORADO' && (
-                <span className="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded border border-purple-700">Wajib ORADO</span>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-400 font-sans mt-1">
-              Tim A (Kursi 1 & 3) vs Tim B (Kursi 2 & 4). Poin diakumulasi per Tim.
-            </p>
-          </button>
-        </div>
-      </div>
-
-      {/* STEP 3: PLAYER NAMES SETUP */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 font-mono">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Users className="w-4 h-4 text-cyan-400" />
-          3. Nama Pemain Per Kursi
-        </h2>
-
-        {matchCategory === 'TEAM_2V2' ? (
-          /* Ticket GH#4: input dikelompokkan per tim agar rekan setim jelas */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(['A', 'B'] as const).map((team) => (
-              <div
-                key={team}
-                className={`rounded-2xl border p-4 space-y-3 ${
-                  team === 'A' ? 'border-emerald-800/70 bg-emerald-950/20' : 'border-sky-800/70 bg-sky-950/20'
-                }`}
-              >
-                <div className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${team === 'A' ? 'text-emerald-300' : 'text-sky-300'}`}>
-                  {team === 'A' ? '🟢 TIM A' : '🔵 TIM B'}
-                  <span className="text-[10px] font-bold text-slate-500 normal-case">
-                    (Kursi {team === 'A' ? '1 & 3' : '2 & 4'})
-                  </span>
-                </div>
-                {SEAT_CONFIG.filter((s) => s.team === team).map((seat) => renderSeatInput(seat))}
-              </div>
-            ))}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {SEAT_CONFIG.map((seat) => renderSeatInput(seat))}
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Apakah Anda yakin ingin mereset skor dan status meja ini ke kondisi awal?')) {
+                  useScorerStore.getState().resetFSM();
+                  alert('Skor meja berhasil di-reset.');
+                }
+              }}
+              className="px-3 py-2 rounded-lg bg-surface-elevated hover:bg-danger/20 border border-border hover:border-danger text-danger text-xs font-mono font-bold transition-all"
+            >
+              Reset Skor Meja
+            </button>
+          </div>
+        </div>
+
+        {submitError && (
+          <div className="bg-danger/10 border border-danger text-danger p-3 rounded-xl text-xs font-mono font-bold flex items-center gap-2.5">
+            <Shield className="w-4 h-4 shrink-0" />
+            <p>{submitError}</p>
           </div>
         )}
-      </div>
 
-      {/* STEP 4: RULESET SPECIFIC CONFIGURATION */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 font-mono">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Sliders className="w-4 h-4 text-cyan-400" />
-          4. Konfigurasi Target & Poin Rules Match
-        </h2>
+        <form onSubmit={handleSubmit} className="space-y-3.5">
+          {/* Split 2-Panel Layout (Approach B) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
+            {/* PANEL KIRI (Col-span 7): Global Setup & Roster */}
+            <div className="lg:col-span-7 space-y-3.5">
+              {/* STEP 1: Ruleset Mode Switcher */}
+              <div className="bg-surface border border-border rounded-xl p-3.5 shadow-xl space-y-3 font-mono">
+                <h2 className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+                  <Trophy className="w-4 h-4 text-brand-cyan" />
+                  1. Mode Ruleset Permainan
+                </h2>
 
-        {rulesetMode === 'PB_ORADO' ? (
-          /* PB ORADO SPECIFIC CONFIGS */
-          <div className="bg-slate-950 border border-purple-800/80 rounded-2xl p-5 font-mono space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div>
-                <span className="text-xs font-black text-purple-300 uppercase tracking-wider block">
-                  KONFIGURASI ORADO ATURAN KHUSUS
-                </span>
-                <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
-                  Target Poin per Set: <strong>101 POIN</strong> (Best of 3 Sets)
-                </span>
-              </div>
-              <span className="px-3 py-1 rounded-xl bg-purple-950 text-purple-300 font-black text-xs border border-purple-700">
-                SET 101
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  setOradoConfig((prev) => ({
-                    ...prev,
-                    apolloRule: !prev.apolloRule,
-                  }))
-                }
-                className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 flex items-center gap-3 text-left"
-              >
-                {oradoConfig.apolloRule ? (
-                  <CheckSquare className="w-5 h-5 text-purple-400 shrink-0" />
-                ) : (
-                  <Square className="w-5 h-5 text-slate-600 shrink-0" />
-                )}
-                <div>
-                  <span className="text-xs font-black text-white block">ATURAN KONDISI APOLLO (101 VS 0)</span>
-                  <span className="text-[10px] text-slate-400 font-sans block">Menang langsung jika 101 vs 0 poin lawan</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setOradoConfig((prev) => ({
-                    ...prev,
-                    deadBalak0Penalty: !prev.deadBalak0Penalty,
-                  }))
-                }
-                className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 flex items-center gap-3 text-left"
-              >
-                {oradoConfig.deadBalak0Penalty ? (
-                  <CheckSquare className="w-5 h-5 text-purple-400 shrink-0" />
-                ) : (
-                  <Square className="w-5 h-5 text-slate-600 shrink-0" />
-                )}
-                <div>
-                  <span className="text-xs font-black text-white block">DENDA BALAK 0 MATI (13 TITIK)</span>
-                  <span className="text-[10px] text-slate-400 font-sans block">Balak 0 tidak bisa keluar = 13 titik denda</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        ) : rulesetMode === 'PB_PORDI' ? (
-          /* PB PORDI LOCKED TARGET */
-          <div className="bg-slate-950 border border-amber-800/80 rounded-2xl p-4 font-mono space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-black text-amber-300 uppercase tracking-wider block">
-                  TARGET PB PORDI RESMI: {matchCategory === 'SINGLE_1V1V1V1' ? 'FIXED 7 RONDE (TUNGGAL)' : 'RACE TO 7 POIN (GANDA)'}
-                </span>
-                <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
-                  Sesuai standar PORDI Indonesia. Bobot poin terunci sesuai aturan standar nasional.
-                </span>
-              </div>
-              <span className="px-3 py-1 rounded-xl bg-amber-950 text-amber-300 font-black text-xs border border-amber-700">
-                {matchCategory === 'SINGLE_1V1V1V1' ? '7 RONDE' : '7 POIN'}
-              </span>
-            </div>
-          </div>
-        ) : (
-          /* CASUAL CUSTOM TARGET & WEIGHTS */
-          <div className="space-y-4 font-mono">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2 font-mono text-xs">
-                <label className="block text-slate-400 font-bold uppercase">TIPE TARGET MATCH</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      setMatchMode('rounds');
-                      setTargetType('FIXED_ROUNDS');
-                      setTargetValue(10);
-                    }}
-                    className={`p-3 rounded-xl border font-bold text-xs ${
-                      matchMode === 'rounds'
-                        ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    onClick={() => setRulesetMode('CASUAL')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      rulesetMode === 'CASUAL'
+                        ? 'bg-brand-cyan/10 border-brand-cyan text-brand-cyan ring-1 ring-brand-cyan'
+                        : 'bg-surface-elevated border-border text-content-muted hover:border-content-muted'
                     }`}
                   >
-                    FIXED ROUNDS
+                    <div className="font-black text-white text-xs">CASUAL</div>
+                    <p className="text-[10px] text-content-muted font-sans mt-0.5">
+                      Mode Bebas Warkop
+                    </p>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setMatchMode('points');
-                      setTargetType('RACE_TO_POINTS');
-                      setTargetValue(50);
-                    }}
-                    className={`p-3 rounded-xl border font-bold text-xs ${
-                      matchMode === 'points'
-                        ? 'bg-amber-950 border-amber-500 text-amber-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    onClick={() => setRulesetMode('PB_PORDI')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      rulesetMode === 'PB_PORDI'
+                        ? 'bg-amber-500/10 border-amber-400 text-amber-300 ring-1 ring-amber-400'
+                        : 'bg-surface-elevated border-border text-content-muted hover:border-content-muted'
                     }`}
                   >
-                    RACE TO POINTS
+                    <div className="font-black text-amber-300 text-xs">PB PORDI</div>
+                    <p className="text-[10px] text-content-muted font-sans mt-0.5">
+                      Standar Resmi PORDI
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRulesetMode('PB_ORADO')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      rulesetMode === 'PB_ORADO'
+                        ? 'bg-purple-500/10 border-purple-400 text-purple-300 ring-1 ring-purple-400'
+                        : 'bg-surface-elevated border-border text-content-muted hover:border-content-muted'
+                    }`}
+                  >
+                    <div className="font-black text-purple-300 text-xs">PB ORADO</div>
+                    <p className="text-[10px] text-content-muted font-sans mt-0.5">
+                      Counting Titik Set 101
+                    </p>
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2 font-mono text-xs">
-                <label className="block text-slate-400 font-bold uppercase">
-                  {matchMode === 'rounds' ? 'TOTAL RONDE MATCH' : 'TARGET BATAS POIN'}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    value={targetValue}
-                    onChange={(e) => setTargetValue(e.target.value)}
-                    min={1}
-                    max={200}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-extrabold text-base focus:outline-none focus:border-cyan-500"
-                  />
-                  <span className="text-xs font-bold text-slate-400 uppercase">
-                    {matchMode === 'rounds' ? 'RONDE' : 'POIN'}
-                  </span>
+              {/* STEP 2: Match Category Switcher (1v1 vs 2v2) */}
+              <div className="bg-surface border border-border rounded-xl p-3.5 shadow-xl space-y-3 font-mono">
+                <h2 className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+                  <Users className="w-4 h-4 text-brand-cyan" />
+                  2. Kategori Pertandingan
+                </h2>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    disabled={rulesetMode === 'PB_ORADO'}
+                    onClick={() => setMatchCategory('SINGLE_1V1V1V1')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      rulesetMode === 'PB_ORADO'
+                        ? 'opacity-40 cursor-not-allowed bg-surface-sunken border-border'
+                        : matchCategory === 'SINGLE_1V1V1V1'
+                        ? 'bg-brand-cyan/10 border-brand-cyan text-brand-cyan ring-1 ring-brand-cyan'
+                        : 'bg-surface-elevated border-border text-content-muted hover:border-content-muted'
+                    }`}
+                  >
+                    <div className="font-black text-white text-xs">TUNGGAL (1V1V1V1)</div>
+                    <p className="text-[10px] text-content-muted font-sans mt-0.5">
+                      4 Pemain Individu
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMatchCategory('TEAM_2V2')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      matchCategory === 'TEAM_2V2'
+                        ? 'bg-brand-lime/10 border-brand-lime text-brand-lime ring-1 ring-brand-lime'
+                        : 'bg-surface-elevated border-border text-content-muted hover:border-content-muted'
+                    }`}
+                  >
+                    <div className="font-black text-white text-xs">GANDA / TIM (2V2)</div>
+                    <p className="text-[10px] text-content-muted font-sans mt-0.5">
+                      Tim A vs Tim B Berhadapan
+                    </p>
+                  </button>
                 </div>
               </div>
-            </div>
 
-            {/* Custom Point Weight Steppers for Casual */}
-            <div className="space-y-2 pt-2">
-              <label className="block text-xs text-slate-400 font-bold font-mono uppercase">BOBOT POIN AKSI CUSTOM</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 font-mono">
-                {[
-                  { key: 'menang_biasa', label: 'Menang Biasa (👑)', desc: 'Standard Win' },
-                  { key: 'kandang', label: 'Kandang (🔥)', desc: 'Close Game' },
-                  { key: 'ceki', label: 'Ceki (✅)', desc: 'Domino Check' },
-                  { key: 'palang', label: 'Palang (🐐)', desc: 'Palang Action' },
-                  { key: 'tangkap', label: 'Tangkap (🚓)', desc: 'Capturer Bonus' },
-                  { key: 'ditangkap', label: 'Ditangkap (💀)', desc: 'Victim Penalty' },
-                ].map((item) => {
-                  const k = item.key as keyof PointsConfig;
-                  const val = pointsConfig[k];
+              {/* STEP 3: Formasi & Nama Pemain (4-Kolom Horizontal Grid jika 1v1v1v1) */}
+              <div className="bg-surface border border-border rounded-xl p-3.5 shadow-xl space-y-3 font-mono">
+                <h2 className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+                  <Users className="w-4 h-4 text-brand-cyan" />
+                  3. Formasi & Nama Pemain
+                </h2>
 
-                  return (
-                    <div
-                      key={item.key}
-                      className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
-                    >
-                      <div>
-                        <span className="text-xs font-extrabold text-white block">{item.label}</span>
-                        <span className="text-[10px] text-slate-500 block mt-0.5">{item.desc}</span>
+                {matchCategory === 'TEAM_2V2' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(['A', 'B'] as const).map((team) => (
+                      <div
+                        key={team}
+                        className={`rounded-lg border p-3 space-y-2 ${
+                          team === 'A' ? 'border-[#34D399]/40 bg-[#34D399]/5' : 'border-[#6366F1]/40 bg-[#6366F1]/5'
+                        }`}
+                      >
+                        <div className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${team === 'A' ? 'text-[#34D399]' : 'text-[#6366F1]'}`}>
+                          {team === 'A' ? '🟢 TIM A' : '🔵 TIM B'}
+                          <span className="text-[10px] font-bold text-content-muted normal-case">
+                            (Kursi {team === 'A' ? '1 & 3' : '2 & 4'})
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {SEAT_CONFIG.filter((s) => s.team === team).map((seat) => renderSeatInput(seat))}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Layout Grid 4-Kolom Berjejer Horizontal untuk mode Tunggal 1v1v1v1 */
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    {SEAT_CONFIG.map((seat) => renderSeatInput(seat))}
+                  </div>
+                )}
+              </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleConfigChange(k, -1)}
-                          className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex items-center justify-center border border-slate-700"
-                        >
-                          -
-                        </button>
-                        <span className="w-8 text-center font-mono font-black text-sm text-cyan-400">
-                          {val > 0 ? `+${val}` : val}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleConfigChange(k, 1)}
-                          className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-black text-sm flex items-center justify-center border border-slate-700"
-                        >
-                          +
-                        </button>
-                      </div>
+              {/* STEP 4: Stepper Target Match */}
+              <div className="bg-surface border border-border rounded-xl p-3.5 shadow-xl space-y-3 font-mono">
+                <h2 className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+                  <Target className="w-4 h-4 text-brand-cyan" />
+                  4. Stepper Target Match
+                </h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1 text-xs">
+                    <label className="block text-content-muted font-bold uppercase text-[10px]">MODE TARGET</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={rulesetMode !== 'CASUAL'}
+                        onClick={() => {
+                          setMatchMode('rounds');
+                          setTargetType('FIXED_ROUNDS');
+                          setTargetValue(10);
+                        }}
+                        className={`p-2.5 rounded-lg border font-bold text-xs ${
+                          matchMode === 'rounds'
+                            ? 'bg-brand-cyan/10 border-brand-cyan text-brand-cyan'
+                            : 'bg-surface-elevated border-border text-content-muted'
+                        }`}
+                      >
+                        FIXED ROUNDS
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={rulesetMode !== 'CASUAL'}
+                        onClick={() => {
+                          setMatchMode('points');
+                          setTargetType('RACE_TO_POINTS');
+                          setTargetValue(50);
+                        }}
+                        className={`p-2.5 rounded-lg border font-bold text-xs ${
+                          matchMode === 'points'
+                            ? 'bg-amber-500/10 border-amber-400 text-amber-300'
+                            : 'bg-surface-elevated border-border text-content-muted'
+                        }`}
+                      >
+                        RACE TO POINTS
+                      </button>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  <div className="space-y-1 text-xs">
+                    <label className="block text-content-muted font-bold uppercase text-[10px]">TARGET BATAS</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={rulesetMode !== 'CASUAL'}
+                        onClick={() => setTargetValue((prev) => Math.max(1, Number(prev) - 1))}
+                        className="w-9 h-9 rounded-lg bg-surface-elevated border border-border font-black text-base text-white hover:bg-surface-subtle disabled:opacity-40"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        disabled={rulesetMode !== 'CASUAL'}
+                        value={targetValue}
+                        onChange={(e) => setTargetValue(e.target.value)}
+                        className="w-full bg-surface-sunken border border-border rounded-lg px-2 py-1.5 text-center text-white font-mono font-extrabold text-sm focus:outline-none disabled:opacity-50"
+                      />
+                      <button
+                        type="button"
+                        disabled={rulesetMode !== 'CASUAL'}
+                        onClick={() => setTargetValue((prev) => Number(prev) + 1)}
+                        className="w-9 h-9 rounded-lg bg-surface-elevated border border-border font-black text-base text-white hover:bg-surface-subtle disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* PANEL KANAN (Col-span 5): Matriks Bobot Poin Adaptif & Edukasi Regulasi */}
+            <div className="lg:col-span-5 space-y-3.5">
+              <div className="bg-surface border border-border rounded-xl p-3.5 shadow-xl space-y-3 font-mono sticky top-4">
+                <h2 className="text-xs font-bold text-content-secondary uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2">
+                  <Sliders className="w-4 h-4 text-brand-lime" />
+                  Matriks Bobot Poin Adaptif
+                </h2>
+
+                {rulesetMode === 'CASUAL' ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-content-muted font-sans">
+                      Atur status [ON/OFF] dan bobot poin per aksi kemenangan/kekalahan meja:
+                    </p>
+
+                    {CASUAL_ACTION_ROWS.map((item) => {
+                      const k = item.key;
+                      const val = pointsConfig[k];
+                      const isEnabled = enabledActions[k] ?? true;
+
+                      return (
+                        <div
+                          key={item.key}
+                          className={`p-2 rounded-lg border flex items-center justify-between transition-opacity ${
+                            isEnabled
+                              ? 'bg-surface-elevated border-border'
+                              : 'bg-surface-sunken/60 border-border/40 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <Switch
+                              checked={isEnabled}
+                              onCheckedChange={() => handleToggleAction(k)}
+                              className="scale-90 shrink-0"
+                            />
+                            <div className="truncate">
+                              <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                                <span>{item.icon}</span>
+                                <span className="truncate">{item.label}</span>
+                              </span>
+                              <span className="text-[10px] text-content-muted block truncate">{item.desc}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              disabled={!isEnabled}
+                              onClick={() => handleConfigChange(k, -1)}
+                              className="w-6 h-6 rounded-md bg-surface-subtle hover:bg-surface border border-border text-white font-black text-xs disabled:opacity-30"
+                            >
+                              -
+                            </button>
+                            <span className="w-9 text-center font-mono font-black text-base text-brand-lime">
+                              {val > 0 ? `+${val}` : val}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={!isEnabled}
+                              onClick={() => handleConfigChange(k, 1)}
+                              className="w-6 h-6 rounded-md bg-surface-subtle hover:bg-surface border border-border text-white font-black text-xs disabled:opacity-30"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Edukasi Regulasi Resmi PB PORDI & PB ORADO */
+                  <div className="space-y-3 font-sans">
+                    <div className="p-3.5 rounded-lg bg-surface-sunken border border-border space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-border pb-2 font-mono">
+                        <span className="text-xs font-black text-brand-lime uppercase flex items-center gap-1.5">
+                          <BookOpen className="w-4 h-4 text-amber-400" /> PRESET LOCKED
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          RESMI {rulesetMode}
+                        </span>
+                      </div>
+
+                      {rulesetMode === 'PB_PORDI' ? (
+                        <div className="space-y-2 text-xs text-content-secondary leading-relaxed">
+                          <p className="font-semibold text-amber-200">
+                            🏆 Mekanisme Resmi Pengurus Besar PORDI:
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-[11px] font-mono text-content-muted">
+                            <li><strong className="text-white">Format Target:</strong> 7 Ronde (Tunggal) / Race to 7 Pts (Ganda).</li>
+                            <li><strong className="text-white">Pembuka Ronde:</strong> Dimulai oleh pemegang kartu Balak 6.</li>
+                            <li><strong className="text-white">Matriks Poin Kemenangan:</strong> Biasa (+1), Kandang (+2), Ceki (+2), Palang (+4), Tangkap (+3 / -3 denda).</li>
+                            <li><strong className="text-white">Denda Passed Palsu:</strong> Denda +1 / +3 poin untuk lawan jika wasit menemukan kecurangan lewat balak.</li>
+                          </ul>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-xs text-content-secondary leading-relaxed">
+                          <p className="font-semibold text-purple-200">
+                            ⚡ Mekanisme Resmi Pengurus Besar ORADO:
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-[11px] font-mono text-content-muted">
+                            <li><strong className="text-white">Format Target:</strong> Set 101 Poin Kumulatif (Tim 2v2 Best of 3).</li>
+                            <li><strong className="text-white">Pembuka Ronde:</strong> Dimulai oleh pemegang kartu Balak 0.</li>
+                            <li><strong className="text-white">Counting Titik:</strong> Menghitung total sisa titik kartu tangan lawan saat ronde usai.</li>
+                            <li><strong className="text-white">Multiplier Aksi:</strong> Dua Ujung (x2), Balak Habis (x2), Macet Beradu, Denda Balak 0 Mati = 13 titik.</li>
+                            <li><strong className="text-white">Kondisi Apollo:</strong> Kemenangan mutlak 101 vs 0 instan menyapu set.</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* SUBMIT BUTTON */}
-      <div className="pt-2">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-sm uppercase tracking-wider shadow-xl shadow-cyan-500/25 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
-        >
-          {isSubmitting ? 'MENYIMPAN & MEMULAI...' : 'SIMPAN & MULAI SESI WASIT'} <ArrowRight className="w-5 h-5" />
-        </button>
+          <div className="pt-3 border-t border-border flex justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full md:w-auto px-8 py-3 rounded-full bg-gradient-to-r from-brand-cyan to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-background font-black text-xs uppercase tracking-wider shadow-xl shadow-brand-cyan/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50"
+            >
+              {isSubmitting ? 'MENYIMPAN & MEMULAI...' : 'SIMPAN & MULAI PERTANDINGAN'} <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   );
 }

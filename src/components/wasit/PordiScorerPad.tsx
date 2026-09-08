@@ -12,7 +12,7 @@ import { PenaltyModal } from '@/components/wasit/PenaltyModal';
 import TimedomiPanel from '@/components/wasit/TimedomiPanel';
 import TeamQuadGrid from '@/components/wasit/TeamQuadGrid';
 import PipMotif from '@/components/wasit/PipMotif';
-import { RotateCcw, AlertOctagon, Undo2 } from 'lucide-react';
+import { RotateCcw, AlertOctagon, Undo2, Settings } from 'lucide-react';
 
 interface PordiScorerPadProps {
   tableId: string;
@@ -48,12 +48,17 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
     getRankedPlayers,
     getLast5RoundHistory,
     setKandangContext,
+    updateTargetMidGame,
   } = useScorerStore();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTimer, setToastTimer] = useState<NodeJS.Timeout | null>(null);
 
   const [isPenaltyModalOpen, setIsPenaltyModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [editMode, setEditMode] = useState<'rounds' | 'points'>(match.matchMode || 'rounds');
+  const [editTargetValue, setEditTargetValue] = useState<number | string>(match.targetValue || 7);
+
 
   const [victoryOverlayData, setVictoryOverlayData] = useState<{
     actionType: ActionType;
@@ -155,6 +160,17 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              setEditMode(match.matchMode || 'rounds');
+              setEditTargetValue(match.targetValue || 7);
+              setIsSettingsOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-950/80 hover:bg-amber-900/80 border border-amber-700/80 text-amber-300 font-extrabold text-[11px] transition-all shadow-md"
+            title="Menu Wasit & Target"
+          >
+            <Settings className="w-3.5 h-3.5 text-amber-400" /> TARGET
+          </button>
+          <button
             onClick={() => setIsPenaltyModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-300 font-extrabold text-[11px] transition-all shadow-md"
           >
@@ -168,6 +184,7 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
             <RotateCcw className="w-3.5 h-3.5" /> UNDO
           </button>
         </div>
+
       </div>
 
       {/* Timedomi — Stopwatch Digital khusus PB PORDI (PRD 2.2/4.3, devlog/0008) */}
@@ -303,6 +320,108 @@ export default function PordiScorerPad({ tableId, matchSession }: PordiScorerPad
         matchCategory={match.matchCategory}
         onApplyPenalty={handleApplyPenalty}
       />
+
+      {/* Mid-Game Target Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase font-display">
+                <Settings className="w-4 h-4 text-amber-400" /> UBAH TARGET MATCH
+              </h3>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">TIPE TARGET MATCH</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditMode('rounds');
+                      setEditTargetValue(7);
+                    }}
+                    className={`p-2.5 rounded-xl border font-bold text-xs ${
+                      editMode === 'rounds'
+                        ? 'bg-amber-950 border-amber-500 text-amber-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    FIXED ROUNDS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditMode('points');
+                      setEditTargetValue(7);
+                    }}
+                    className={`p-2.5 rounded-xl border font-bold text-xs ${
+                      editMode === 'points'
+                        ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    RACE TO POINTS
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1 uppercase">NILAI TARGET BARU</label>
+                <input
+                  type="number"
+                  value={editTargetValue}
+                  onChange={(e) => setEditTargetValue(e.target.value)}
+                  min={1}
+                  max={200}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-extrabold text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+              >
+                BATAL
+              </button>
+              <button
+                onClick={async () => {
+                  const val = Number(editTargetValue) || (editMode === 'rounds' ? 10 : 7);
+                  updateTargetMidGame(editMode, val);
+                  setIsSettingsOpen(false);
+                  const matchId = match.id;
+                  if (!matchId || matchId === 'empty') return;
+                  try {
+                    await fetch('/api/matches', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'UPDATE_TARGET',
+                        matchId,
+                        updateTargetData: { matchMode: editMode, targetValue: val },
+                      }),
+                    });
+                  } catch (err) {
+                    console.warn('Gagal menyimpan target PORDI ke database:', err);
+                  }
+                }}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase cursor-pointer"
+              >
+                SIMPAN TARGET
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

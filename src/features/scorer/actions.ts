@@ -55,11 +55,25 @@ export async function commitRoundAction(input: CommitRoundInput) {
   try {
     const { matchId, winnerPlayerId, winnerTeam, actionType, victimPlayerId, manualStatuses, rawPointsInput, oradoMultipliers, isPenalty, penaltyAmount, kandangVariant, kandangRecipients } = input;
 
-    // 1. Fetch match session
-    const matchSession = await prisma.matchSession.findUnique({
-      where: { id: matchId },
-      include: { table: true },
-    });
+    // 1. Fetch match session by ID or active table session fallback
+    let matchSession = matchId && !matchId.startsWith('match-table-')
+      ? await prisma.matchSession.findUnique({
+          where: { id: matchId },
+          include: { table: true },
+        })
+      : null;
+
+    if (!matchSession) {
+      const extractedTableNum = Number(String(matchId).replace(/\D/g, '')) || 1;
+      matchSession = await prisma.matchSession.findFirst({
+        where: {
+          tableNumber: extractedTableNum,
+          status: 'IN_PROGRESS',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { table: true },
+      });
+    }
 
     if (!matchSession) {
       return { status: 'error', message: 'Sesi pertandingan tidak ditemukan' };

@@ -71,9 +71,10 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const activeAwards = [
-    awards.rajaKandang && { key: 'kandang', label: '🔥 Raja Kandang', player: awards.rajaKandang.player.name, count: `${awards.rajaKandang.count}x`, bg: 'bg-orange-950/30 border-orange-800/50 text-orange-400' },
-    awards.terbanyakPalang && { key: 'palang', label: '🐐 Terbanyak Palang', player: awards.terbanyakPalang.player.name, count: `${awards.terbanyakPalang.count}x`, bg: 'bg-purple-950/30 border-purple-800/50 text-purple-400' },
-    awards.cekiMaster && { key: 'ceki', label: '✅ Ceki Master', player: awards.cekiMaster.player.name, count: `${awards.cekiMaster.count}x`, bg: 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400' },
+    awards.rajaKandang && { key: 'kandang', label: '🔥 Kandang Terbanyak', player: awards.rajaKandang.player.name, count: `${awards.rajaKandang.count}x`, bg: 'bg-orange-950/30 border-orange-800/50 text-orange-400' },
+    awards.terbanyakPalang && { key: 'palang', label: '🐐 Palang Terbanyak', player: awards.terbanyakPalang.player.name, count: `${awards.terbanyakPalang.count}x`, bg: 'bg-purple-950/30 border-purple-800/50 text-purple-400' },
+    awards.cekiMaster && { key: 'ceki', label: '✅ Ceki Terbanyak', player: awards.cekiMaster.player.name, count: `${awards.cekiMaster.count}x`, bg: 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400' },
+    awards.tangkapTerbanyak && { key: 'tangkap_win', label: '🚓 Tangkap Terbanyak', player: awards.tangkapTerbanyak.player.name, count: `${awards.tangkapTerbanyak.count}x`, bg: 'bg-cyan-950/30 border-cyan-800/50 text-cyan-400' },
     awards.palingSeringDitangkap && { key: 'tangkap', label: '💀 Korban Tangkap', player: awards.palingSeringDitangkap.player.name, count: `${awards.palingSeringDitangkap.count}x`, bg: 'bg-rose-950/30 border-rose-800/50 text-rose-400' },
   ].filter(Boolean);
 
@@ -110,7 +111,7 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
           {/* WIDE 2-COLUMN GRID (JUARA 1 ON LEFT, KLASEMEN & AWARDS ON RIGHT) */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
-            
+
             {/* LEFT COLUMN: 🥇 JUARA 1 WINNER MEDAL CARD + ACTION BUTTONS (col-span-5) */}
             <div className="md:col-span-5 bg-gradient-to-b from-amber-950/30 via-slate-950/60 to-slate-950 border border-amber-500/40 rounded-2xl p-5 flex flex-col justify-between text-center relative overflow-hidden">
               <div className="relative space-y-2 my-auto py-2">
@@ -128,13 +129,6 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </div>
                   </div>
                 </motion.div>
-
-                <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block font-sans">
-                  MEDALI PEMENANG JUARA 1
-                </span>
-                <div className="flex justify-center my-1.5">
-                  <PipMotif count={7} accent="pordi" size="md" />
-                </div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white font-display tracking-tight">
                   {matchWinner?.name || 'Pemain'}
                 </h2>
@@ -156,7 +150,7 @@ export const MatchFinishedModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
             {/* RIGHT COLUMN: 📊 KLASEMEN PERINGKAT 2 - 4 + 🏆 FUN AWARDS (col-span-7) */}
             <div className="md:col-span-7 flex flex-col justify-between space-y-4">
-              
+
               {/* Leaderboard Ranks 2, 3, 4 */}
               <div className="space-y-2">
                 <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">

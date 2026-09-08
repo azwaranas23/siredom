@@ -2,16 +2,16 @@
 
 import React from 'react';
 import { useScorerStore } from '@/store/useScorerStore';
-import { ActionType } from '@/types/domino';
+import { ActionType, EnabledActionsConfig } from '@/types/domino';
 import { X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const ACTIONS: { type: ActionType; label: string; icon: string }[] = [
-  { type: 'MENANG_BIASA', label: 'MENANG BIASA', icon: '👑' },
-  { type: 'KANDANG', label: 'KANDANG', icon: '🔥' },
-  { type: 'CEKI', label: 'CEKI', icon: '✅' },
-  { type: 'PALANG', label: 'PALANG', icon: '🐐' },
-  { type: 'TANGKAP', label: 'TANGKAP', icon: '🚓' },
+const ACTIONS: { type: ActionType; label: string; icon: string; key: keyof EnabledActionsConfig }[] = [
+  { type: 'MENANG_BIASA', label: 'MENANG BIASA', icon: '👑', key: 'menang_biasa' },
+  { type: 'KANDANG', label: 'KANDANG', icon: '🔥', key: 'kandang' },
+  { type: 'CEKI', label: 'CEKI', icon: '✅', key: 'ceki' },
+  { type: 'PALANG', label: 'PALANG', icon: '🐐', key: 'palang' },
+  { type: 'TANGKAP', label: 'TANGKAP', icon: '🚓', key: 'tangkap' },
 ];
 
 interface Props {
@@ -34,6 +34,12 @@ export const WinnerActionModal: React.FC<Props> = ({ isOpen, onClose, winnerPlay
     selectWinnerAndAction(winner.id, actionType);
   };
 
+  const enabledActionsConfig = match.rulesConfig?.enabledActions;
+  const activeActions = ACTIONS.filter((act) => {
+    if (!enabledActionsConfig) return true;
+    return enabledActionsConfig[act.key] ?? true;
+  });
+
   return (
     <>
       {/* Dark Blur Backdrop */}
@@ -43,7 +49,7 @@ export const WinnerActionModal: React.FC<Props> = ({ isOpen, onClose, winnerPlay
       />
 
       {/* Full-width Edge-to-Edge Bottom Sheet Drawer */}
-      <div className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#0d1527]/95 backdrop-blur-xl border-t border-slate-800/80 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] p-4 md:p-6 pb-6 md:pb-8 animate-in slide-in-from-bottom duration-300">
+      <div className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#0d1527]/95 backdrop-blur-xl border-t border-slate-800/80 rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)] p-4 md:p-6 pb-6 md:pb-8 animate-in slide-in-from-bottom duration-300">
         {/* Top Pill Handle Bar */}
         <div className="w-12 h-1 bg-slate-700/80 rounded-full mx-auto mb-4" />
 
@@ -60,25 +66,44 @@ export const WinnerActionModal: React.FC<Props> = ({ isOpen, onClose, winnerPlay
           </button>
         </div>
 
+        {/* Grid of Arcade Keycap Action Tiles (filtered by enabledActions) */}
+        <div className={`grid gap-2 md:gap-4 max-w-4xl mx-auto py-1 ${activeActions.length <= 2
+          ? 'grid-cols-2'
+          : activeActions.length === 3
+            ? 'grid-cols-3'
+            : activeActions.length === 4
+              ? 'grid-cols-4'
+              : 'grid-cols-5'
+          }`}>
+          {activeActions.map((act) => {
+            const colorClass =
+              act.type === 'MENANG_BIASA'
+                ? 'border-win-biasa/50 text-win-biasa hover:bg-win-biasa/10'
+                : act.type === 'KANDANG'
+                  ? 'border-win-kandang/50 text-win-kandang hover:bg-win-kandang/10'
+                  : act.type === 'CEKI'
+                    ? 'border-win-ceki/50 text-win-ceki hover:bg-win-ceki/10'
+                    : act.type === 'PALANG'
+                      ? 'border-win-palang/50 text-win-palang hover:bg-win-palang/10'
+                      : 'border-win-tangkap/50 text-win-tangkap hover:bg-win-tangkap/10';
 
-        {/* Horizontal Grid of 5 Action Tiles with Motion Tactile Feedback */}
-        <div className="grid grid-cols-5 gap-2 md:gap-4 max-w-3xl mx-auto py-1">
-          {ACTIONS.map((act) => (
-            <motion.button
-              key={act.type}
-              whileHover={{ scale: 1.06 }}
-              whileTap={{ scale: 0.90 }}
-              onClick={() => handleActionClick(act.type)}
-              className="bg-slate-900/90 border border-slate-800 hover:border-amber-400/90 hover:bg-amber-950/30 rounded-2xl p-3 md:p-4 flex flex-col items-center justify-center min-h-[90px] md:min-h-[105px] cursor-pointer transition-all group shadow-lg active:ring-2 active:ring-amber-400"
-            >
-              <span className="text-2xl md:text-4xl mb-1.5 group-hover:scale-110 transition-transform">
-                {act.icon}
-              </span>
-              <span className="text-[10px] md:text-xs font-black tracking-wider text-slate-300 font-mono text-center uppercase group-hover:text-amber-300">
-                {act.label}
-              </span>
-            </motion.button>
-          ))}
+            return (
+              <motion.button
+                key={act.type}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.93 }}
+                onClick={() => handleActionClick(act.type)}
+                className={`bg-surface-elevated border-2 rounded-xl p-3 md:p-4 flex flex-col items-center justify-center min-h-[90px] md:min-h-[110px] cursor-pointer transition-all group shadow-xl ${colorClass}`}
+              >
+                <span className="text-2xl md:text-4xl mb-1.5 group-hover:scale-110 transition-transform">
+                  {act.icon}
+                </span>
+                <span className="text-[10px] md:text-xs font-black tracking-wider font-mono text-center uppercase text-white">
+                  {act.label}
+                </span>
+              </motion.button>
+            );
+          })}
         </div>
       </div>
     </>

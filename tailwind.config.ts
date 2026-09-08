@@ -2,96 +2,153 @@ import type { Config } from "tailwindcss";
 import plugin from "tailwindcss/plugin";
 
 const config: Config = {
+  darkMode: ["class"],
   content: [
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/features/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        background: "var(--background)",
+        foreground: "var(--foreground)",
+        card: {
+          DEFAULT: "var(--card)",
+          foreground: "var(--card-foreground)",
+        },
+        popover: {
+          DEFAULT: "var(--popover)",
+          foreground: "var(--popover-foreground)",
+        },
+        primary: {
+          DEFAULT: "var(--primary)",
+          foreground: "var(--primary-foreground)",
+        },
+        secondary: {
+          DEFAULT: "var(--secondary)",
+          foreground: "var(--secondary-foreground)",
+        },
+        muted: {
+          DEFAULT: "var(--muted)",
+          foreground: "var(--muted-foreground)",
+        },
+        accent: {
+          DEFAULT: "var(--accent)",
+          foreground: "var(--accent-foreground)",
+        },
+        destructive: {
+          DEFAULT: "var(--destructive)",
+          foreground: "var(--destructive-foreground)",
+        },
+        border: "var(--border)",
+        input: "var(--input)",
+        ring: "var(--ring)",
 
         surface: {
-          DEFAULT: "hsl(var(--surface))",
-          subtle: "hsl(var(--surface-subtle))",
-          elevated: "hsl(var(--surface-elevated))",
+          DEFAULT: "#171A21",
+          subtle: "#1C202B",
+          elevated: "#222631",
+          sunken: "#0D0F12",
         },
 
-        muted: {
-          foreground: "hsl(var(--muted-foreground))",
+        content: {
+          DEFAULT: "#FFFFFF",
+          secondary: "#94A3B8",
+          muted: "#64748B",
+          inverse: "#0D0F12",
         },
 
-        border: {
-          DEFAULT: "hsl(var(--border))",
-          strong: "hsl(var(--border-strong))",
+        brand: {
+          lime: "#CCFF00",
+          cyan: "#00E5FF",
         },
 
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+        win: {
+          biasa: "#F59E0B",
+          kandang: "#EF4444",
+          ceki: "#10B981",
+          palang: "#8B5CF6",
+          tangkap: "#06B6D4",
         },
 
-        success: "hsl(var(--success))",
-        warning: "hsl(var(--warning))",
-        danger: "hsl(var(--danger))",
-        info: "hsl(var(--info))",
-        ring: "hsl(var(--ring))",
+        success: "#10B981",
+        warning: "#F59E0B",
+        danger: "#EF4444",
+        info: "#06B6D4",
 
         arcade: {
-          bg: "#030712",
-          card: "#0b0f19",
-          border: "#1f293d",
-          accent: "#00f0ff",
+          bg: "#0D0F12",
+          card: "#171A21",
+          border: "#2A2F3D",
+          accent: "#00E5FF",
         },
-        // Token identitas per-mode (devlog/0015 — Tier 3)
         mode: {
-          casual: { DEFAULT: "#22d3ee", soft: "#164e63", dim: "#0e7490" },
-          pordi: { DEFAULT: "#f59e0b", soft: "#78350f", dim: "#b45309" },
-          orado: { DEFAULT: "#a855f7", soft: "#581c87", dim: "#7e22ce" },
+          casual: { DEFAULT: "#00E5FF", soft: "#164E63", dim: "#0E7490" },
+          pordi: { DEFAULT: "#F59E0B", soft: "#78350F", dim: "#B45309" },
+          orado: { DEFAULT: "#8B5CF6", soft: "#581C87", dim: "#7E22CE" },
         },
         player: {
+          1: "#FB7185",
+          2: "#6366F1",
+          3: "#34D399",
+          4: "#FBBF24",
           red: {
-            DEFAULT: "#ef4444",
-            glow: "rgba(239, 68, 68, 0.4)",
-            dark: "#7f1d1d",
+            DEFAULT: "#FB7185",
+            glow: "rgba(251, 113, 133, 0.4)",
+            dark: "#881337",
           },
           blue: {
-            DEFAULT: "#3b82f6",
-            glow: "rgba(59, 130, 246, 0.4)",
-            dark: "#1e3a8a",
+            DEFAULT: "#6366F1",
+            glow: "rgba(99, 102, 241, 0.4)",
+            dark: "#312E81",
           },
           green: {
-            DEFAULT: "#10b981",
-            glow: "rgba(16, 185, 129, 0.4)",
-            dark: "#064e3b",
+            DEFAULT: "#34D399",
+            glow: "rgba(52, 211, 153, 0.4)",
+            dark: "#064E3B",
           },
           yellow: {
-            DEFAULT: "#eab308",
-            glow: "rgba(234, 179, 8, 0.4)",
-            dark: "#713f12",
+            DEFAULT: "#FBBF24",
+            glow: "rgba(251, 191, 36, 0.4)",
+            dark: "#78350F",
           },
         },
       },
       borderRadius: {
-        sm: "var(--radius-sm)",
-        md: "var(--radius-md)",
-        lg: "var(--radius-lg)",
+        sm: "4px",
+        md: "8px",
+        lg: "12px",
+        xl: "16px",
+        full: "9999px",
       },
+
       fontFamily: {
-        display: [
-          "var(--font-display)",
+        sans: [
+          "var(--font-sans)",
+          "Plus Jakarta Sans",
           "system-ui",
           "-apple-system",
-          "BlinkMacSystemFont",
-          "'Segoe UI'",
-          "Roboto",
           "sans-serif",
         ],
-        mono: ["Consolas", "Monaco", "monospace"],
+        display: [
+          "var(--font-sans)",
+          "Plus Jakarta Sans",
+          "system-ui",
+          "-apple-system",
+          "sans-serif",
+        ],
+        mono: [
+          "var(--font-mono)",
+          "JetBrains Mono",
+          "Consolas",
+          "monospace",
+        ],
       },
 
       boxShadow: {
+        surface: "var(--shadow-surface)",
+        overlay: "var(--shadow-overlay)",
         neonRed: "0 0 25px rgba(239, 68, 68, 0.5)",
         neonBlue: "0 0 25px rgba(59, 130, 246, 0.5)",
         neonGreen: "0 0 25px rgba(16, 185, 129, 0.5)",
@@ -103,6 +160,8 @@ const config: Config = {
         pulseGlow: "pulseGlow 2s infinite ease-in-out",
         float: "float 3s ease-in-out infinite",
         shimmer: "shimmer 2.5s infinite linear",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-in-out",
       },
       keyframes: {
         pulseGlow: {
@@ -116,6 +175,14 @@ const config: Config = {
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
+        },
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
     },
